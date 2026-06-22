@@ -51,11 +51,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "172139607552-8f91kgq4299q22f0nilajr0menm4oic5.apps.googleusercontent.com",
+          "client_id": "172139607552-krv86o09uki9k55f14113a6up03detrt.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.moneymate.lite",
-            "certificate_hash": "0e9018a4827aec449d5e587a8b5e1ef4e0c8cc8d"
+            "certificate_hash": "7155ddf82a08afffac56f136af52a6fa66085545"
           }
         },
         {
