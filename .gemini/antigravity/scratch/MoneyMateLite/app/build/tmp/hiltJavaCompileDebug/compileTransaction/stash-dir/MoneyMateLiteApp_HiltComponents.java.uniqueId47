@@ -6,6 +6,7 @@ import com.moneymate.lite.ui.viewmodel.LoanFileViewModel_HiltModules;
 import com.moneymate.lite.ui.viewmodel.LoanViewModel_HiltModules;
 import com.moneymate.lite.ui.viewmodel.PaymentViewModel_HiltModules;
 import com.moneymate.lite.ui.viewmodel.PersonViewModel_HiltModules;
+import com.moneymate.lite.ui.viewmodel.RecentlyDeletedViewModel_HiltModules;
 import com.moneymate.lite.ui.viewmodel.SettingsViewModel_HiltModules;
 import dagger.Binds;
 import dagger.Component;
@@ -167,6 +168,7 @@ public final class MoneyMateLiteApp_HiltComponents {
           ViewModelCBuilderModule.class,
           PaymentViewModel_HiltModules.KeyModule.class,
           PersonViewModel_HiltModules.KeyModule.class,
+          RecentlyDeletedViewModel_HiltModules.KeyModule.class,
           SettingsViewModel_HiltModules.KeyModule.class
       }
   )
@@ -209,6 +211,7 @@ public final class MoneyMateLiteApp_HiltComponents {
           LoanViewModel_HiltModules.BindsModule.class,
           PaymentViewModel_HiltModules.BindsModule.class,
           PersonViewModel_HiltModules.BindsModule.class,
+          RecentlyDeletedViewModel_HiltModules.BindsModule.class,
           SettingsViewModel_HiltModules.BindsModule.class
       }
   )

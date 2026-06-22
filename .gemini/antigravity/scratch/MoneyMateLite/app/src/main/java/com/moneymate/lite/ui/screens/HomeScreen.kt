@@ -278,7 +278,7 @@ private fun FileCard(
                 )
                 Column {
                     Text(
-                        text = file.name,
+                        text = file.name.ifEmpty { "Unnamed File" },
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

@@ -8,6 +8,7 @@ import com.moneymate.lite.ui.viewmodel.PaymentViewModel_HiltModules;
 import com.moneymate.lite.ui.viewmodel.PersonViewModel_HiltModules;
 import com.moneymate.lite.ui.viewmodel.RecentlyDeletedViewModel_HiltModules;
 import com.moneymate.lite.ui.viewmodel.SettingsViewModel_HiltModules;
+import com.moneymate.lite.ui.viewmodel.UpdateViewModel_HiltModules;
 import dagger.Binds;
 import dagger.Component;
 import dagger.Module;
@@ -169,7 +170,8 @@ public final class MoneyMateLiteApp_HiltComponents {
           PaymentViewModel_HiltModules.KeyModule.class,
           PersonViewModel_HiltModules.KeyModule.class,
           RecentlyDeletedViewModel_HiltModules.KeyModule.class,
-          SettingsViewModel_HiltModules.KeyModule.class
+          SettingsViewModel_HiltModules.KeyModule.class,
+          UpdateViewModel_HiltModules.KeyModule.class
       }
   )
   @ActivityRetainedScoped
@@ -212,7 +214,8 @@ public final class MoneyMateLiteApp_HiltComponents {
           PaymentViewModel_HiltModules.BindsModule.class,
           PersonViewModel_HiltModules.BindsModule.class,
           RecentlyDeletedViewModel_HiltModules.BindsModule.class,
-          SettingsViewModel_HiltModules.BindsModule.class
+          SettingsViewModel_HiltModules.BindsModule.class,
+          UpdateViewModel_HiltModules.BindsModule.class
       }
   )
   @ViewModelScoped

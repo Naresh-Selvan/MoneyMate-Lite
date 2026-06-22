@@ -38,6 +38,8 @@ import com.moneymate.lite.ui.viewmodel.RecentlyDeletedViewModel;
 import com.moneymate.lite.ui.viewmodel.RecentlyDeletedViewModel_HiltModules;
 import com.moneymate.lite.ui.viewmodel.SettingsViewModel;
 import com.moneymate.lite.ui.viewmodel.SettingsViewModel_HiltModules;
+import com.moneymate.lite.ui.viewmodel.UpdateViewModel;
+import com.moneymate.lite.ui.viewmodel.UpdateViewModel_HiltModules;
 import dagger.hilt.android.ActivityRetainedLifecycle;
 import dagger.hilt.android.ViewModelLifecycle;
 import dagger.hilt.android.internal.builders.ActivityComponentBuilder;
@@ -396,7 +398,7 @@ public final class DaggerMoneyMateLiteApp_HiltComponents_SingletonC {
 
     @Override
     public Map<Class<?>, Boolean> getViewModelKeys() {
-      return LazyClassKeyMap.<Boolean>of(ImmutableMap.<String, Boolean>builderWithExpectedSize(7).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_AuthViewModel, AuthViewModel_HiltModules.KeyModule.provide()).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_LoanFileViewModel, LoanFileViewModel_HiltModules.KeyModule.provide()).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_LoanViewModel, LoanViewModel_HiltModules.KeyModule.provide()).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_PaymentViewModel, PaymentViewModel_HiltModules.KeyModule.provide()).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_PersonViewModel, PersonViewModel_HiltModules.KeyModule.provide()).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_RecentlyDeletedViewModel, RecentlyDeletedViewModel_HiltModules.KeyModule.provide()).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_SettingsViewModel, SettingsViewModel_HiltModules.KeyModule.provide()).build());
+      return LazyClassKeyMap.<Boolean>of(ImmutableMap.<String, Boolean>builderWithExpectedSize(8).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_AuthViewModel, AuthViewModel_HiltModules.KeyModule.provide()).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_LoanFileViewModel, LoanFileViewModel_HiltModules.KeyModule.provide()).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_LoanViewModel, LoanViewModel_HiltModules.KeyModule.provide()).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_PaymentViewModel, PaymentViewModel_HiltModules.KeyModule.provide()).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_PersonViewModel, PersonViewModel_HiltModules.KeyModule.provide()).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_RecentlyDeletedViewModel, RecentlyDeletedViewModel_HiltModules.KeyModule.provide()).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_SettingsViewModel, SettingsViewModel_HiltModules.KeyModule.provide()).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_UpdateViewModel, UpdateViewModel_HiltModules.KeyModule.provide()).build());
     }
 
     @Override
@@ -416,28 +418,21 @@ public final class DaggerMoneyMateLiteApp_HiltComponents_SingletonC {
 
     @IdentifierNameString
     private static final class LazyClassKeyProvider {
-      static String com_moneymate_lite_ui_viewmodel_LoanFileViewModel = "com.moneymate.lite.ui.viewmodel.LoanFileViewModel";
+      static String com_moneymate_lite_ui_viewmodel_LoanViewModel = "com.moneymate.lite.ui.viewmodel.LoanViewModel";
+
+      static String com_moneymate_lite_ui_viewmodel_PersonViewModel = "com.moneymate.lite.ui.viewmodel.PersonViewModel";
+
+      static String com_moneymate_lite_ui_viewmodel_UpdateViewModel = "com.moneymate.lite.ui.viewmodel.UpdateViewModel";
+
+      static String com_moneymate_lite_ui_viewmodel_RecentlyDeletedViewModel = "com.moneymate.lite.ui.viewmodel.RecentlyDeletedViewModel";
 
       static String com_moneymate_lite_ui_viewmodel_AuthViewModel = "com.moneymate.lite.ui.viewmodel.AuthViewModel";
 
       static String com_moneymate_lite_ui_viewmodel_SettingsViewModel = "com.moneymate.lite.ui.viewmodel.SettingsViewModel";
 
-      static String com_moneymate_lite_ui_viewmodel_LoanViewModel = "com.moneymate.lite.ui.viewmodel.LoanViewModel";
-
-      static String com_moneymate_lite_ui_viewmodel_PersonViewModel = "com.moneymate.lite.ui.viewmodel.PersonViewModel";
-
-      static String com_moneymate_lite_ui_viewmodel_RecentlyDeletedViewModel = "com.moneymate.lite.ui.viewmodel.RecentlyDeletedViewModel";
+      static String com_moneymate_lite_ui_viewmodel_LoanFileViewModel = "com.moneymate.lite.ui.viewmodel.LoanFileViewModel";
 
       static String com_moneymate_lite_ui_viewmodel_PaymentViewModel = "com.moneymate.lite.ui.viewmodel.PaymentViewModel";
-
-      @KeepFieldType
-      LoanFileViewModel com_moneymate_lite_ui_viewmodel_LoanFileViewModel2;
-
-      @KeepFieldType
-      AuthViewModel com_moneymate_lite_ui_viewmodel_AuthViewModel2;
-
-      @KeepFieldType
-      SettingsViewModel com_moneymate_lite_ui_viewmodel_SettingsViewModel2;
 
       @KeepFieldType
       LoanViewModel com_moneymate_lite_ui_viewmodel_LoanViewModel2;
@@ -446,7 +441,19 @@ public final class DaggerMoneyMateLiteApp_HiltComponents_SingletonC {
       PersonViewModel com_moneymate_lite_ui_viewmodel_PersonViewModel2;
 
       @KeepFieldType
+      UpdateViewModel com_moneymate_lite_ui_viewmodel_UpdateViewModel2;
+
+      @KeepFieldType
       RecentlyDeletedViewModel com_moneymate_lite_ui_viewmodel_RecentlyDeletedViewModel2;
+
+      @KeepFieldType
+      AuthViewModel com_moneymate_lite_ui_viewmodel_AuthViewModel2;
+
+      @KeepFieldType
+      SettingsViewModel com_moneymate_lite_ui_viewmodel_SettingsViewModel2;
+
+      @KeepFieldType
+      LoanFileViewModel com_moneymate_lite_ui_viewmodel_LoanFileViewModel2;
 
       @KeepFieldType
       PaymentViewModel com_moneymate_lite_ui_viewmodel_PaymentViewModel2;
@@ -474,6 +481,8 @@ public final class DaggerMoneyMateLiteApp_HiltComponents_SingletonC {
 
     private Provider<SettingsViewModel> settingsViewModelProvider;
 
+    private Provider<UpdateViewModel> updateViewModelProvider;
+
     private ViewModelCImpl(SingletonCImpl singletonCImpl,
         ActivityRetainedCImpl activityRetainedCImpl, SavedStateHandle savedStateHandleParam,
         ViewModelLifecycle viewModelLifecycleParam) {
@@ -494,11 +503,12 @@ public final class DaggerMoneyMateLiteApp_HiltComponents_SingletonC {
       this.personViewModelProvider = new SwitchingProvider<>(singletonCImpl, activityRetainedCImpl, viewModelCImpl, 4);
       this.recentlyDeletedViewModelProvider = new SwitchingProvider<>(singletonCImpl, activityRetainedCImpl, viewModelCImpl, 5);
       this.settingsViewModelProvider = new SwitchingProvider<>(singletonCImpl, activityRetainedCImpl, viewModelCImpl, 6);
+      this.updateViewModelProvider = new SwitchingProvider<>(singletonCImpl, activityRetainedCImpl, viewModelCImpl, 7);
     }
 
     @Override
     public Map<Class<?>, javax.inject.Provider<ViewModel>> getHiltViewModelMap() {
-      return LazyClassKeyMap.<javax.inject.Provider<ViewModel>>of(ImmutableMap.<String, javax.inject.Provider<ViewModel>>builderWithExpectedSize(7).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_AuthViewModel, ((Provider) authViewModelProvider)).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_LoanFileViewModel, ((Provider) loanFileViewModelProvider)).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_LoanViewModel, ((Provider) loanViewModelProvider)).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_PaymentViewModel, ((Provider) paymentViewModelProvider)).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_PersonViewModel, ((Provider) personViewModelProvider)).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_RecentlyDeletedViewModel, ((Provider) recentlyDeletedViewModelProvider)).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_SettingsViewModel, ((Provider) settingsViewModelProvider)).build());
+      return LazyClassKeyMap.<javax.inject.Provider<ViewModel>>of(ImmutableMap.<String, javax.inject.Provider<ViewModel>>builderWithExpectedSize(8).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_AuthViewModel, ((Provider) authViewModelProvider)).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_LoanFileViewModel, ((Provider) loanFileViewModelProvider)).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_LoanViewModel, ((Provider) loanViewModelProvider)).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_PaymentViewModel, ((Provider) paymentViewModelProvider)).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_PersonViewModel, ((Provider) personViewModelProvider)).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_RecentlyDeletedViewModel, ((Provider) recentlyDeletedViewModelProvider)).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_SettingsViewModel, ((Provider) settingsViewModelProvider)).put(LazyClassKeyProvider.com_moneymate_lite_ui_viewmodel_UpdateViewModel, ((Provider) updateViewModelProvider)).build());
     }
 
     @Override
@@ -508,25 +518,24 @@ public final class DaggerMoneyMateLiteApp_HiltComponents_SingletonC {
 
     @IdentifierNameString
     private static final class LazyClassKeyProvider {
-      static String com_moneymate_lite_ui_viewmodel_SettingsViewModel = "com.moneymate.lite.ui.viewmodel.SettingsViewModel";
-
-      static String com_moneymate_lite_ui_viewmodel_PersonViewModel = "com.moneymate.lite.ui.viewmodel.PersonViewModel";
+      static String com_moneymate_lite_ui_viewmodel_PaymentViewModel = "com.moneymate.lite.ui.viewmodel.PaymentViewModel";
 
       static String com_moneymate_lite_ui_viewmodel_AuthViewModel = "com.moneymate.lite.ui.viewmodel.AuthViewModel";
 
       static String com_moneymate_lite_ui_viewmodel_RecentlyDeletedViewModel = "com.moneymate.lite.ui.viewmodel.RecentlyDeletedViewModel";
 
+      static String com_moneymate_lite_ui_viewmodel_UpdateViewModel = "com.moneymate.lite.ui.viewmodel.UpdateViewModel";
+
+      static String com_moneymate_lite_ui_viewmodel_SettingsViewModel = "com.moneymate.lite.ui.viewmodel.SettingsViewModel";
+
       static String com_moneymate_lite_ui_viewmodel_LoanFileViewModel = "com.moneymate.lite.ui.viewmodel.LoanFileViewModel";
 
-      static String com_moneymate_lite_ui_viewmodel_PaymentViewModel = "com.moneymate.lite.ui.viewmodel.PaymentViewModel";
+      static String com_moneymate_lite_ui_viewmodel_PersonViewModel = "com.moneymate.lite.ui.viewmodel.PersonViewModel";
 
       static String com_moneymate_lite_ui_viewmodel_LoanViewModel = "com.moneymate.lite.ui.viewmodel.LoanViewModel";
 
       @KeepFieldType
-      SettingsViewModel com_moneymate_lite_ui_viewmodel_SettingsViewModel2;
-
-      @KeepFieldType
-      PersonViewModel com_moneymate_lite_ui_viewmodel_PersonViewModel2;
+      PaymentViewModel com_moneymate_lite_ui_viewmodel_PaymentViewModel2;
 
       @KeepFieldType
       AuthViewModel com_moneymate_lite_ui_viewmodel_AuthViewModel2;
@@ -535,10 +544,16 @@ public final class DaggerMoneyMateLiteApp_HiltComponents_SingletonC {
       RecentlyDeletedViewModel com_moneymate_lite_ui_viewmodel_RecentlyDeletedViewModel2;
 
       @KeepFieldType
+      UpdateViewModel com_moneymate_lite_ui_viewmodel_UpdateViewModel2;
+
+      @KeepFieldType
+      SettingsViewModel com_moneymate_lite_ui_viewmodel_SettingsViewModel2;
+
+      @KeepFieldType
       LoanFileViewModel com_moneymate_lite_ui_viewmodel_LoanFileViewModel2;
 
       @KeepFieldType
-      PaymentViewModel com_moneymate_lite_ui_viewmodel_PaymentViewModel2;
+      PersonViewModel com_moneymate_lite_ui_viewmodel_PersonViewModel2;
 
       @KeepFieldType
       LoanViewModel com_moneymate_lite_ui_viewmodel_LoanViewModel2;
@@ -585,6 +600,9 @@ public final class DaggerMoneyMateLiteApp_HiltComponents_SingletonC {
 
           case 6: // com.moneymate.lite.ui.viewmodel.SettingsViewModel 
           return (T) new SettingsViewModel(singletonCImpl.uploadHelperProvider.get(), singletonCImpl.restoreHelperProvider.get(), singletonCImpl.loanFileRepositoryProvider.get(), singletonCImpl.personRepositoryProvider.get(), singletonCImpl.loanRepositoryProvider.get(), singletonCImpl.paymentRepositoryProvider.get());
+
+          case 7: // com.moneymate.lite.ui.viewmodel.UpdateViewModel 
+          return (T) new UpdateViewModel(ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule));
 
           default: throw new AssertionError(id);
         }
