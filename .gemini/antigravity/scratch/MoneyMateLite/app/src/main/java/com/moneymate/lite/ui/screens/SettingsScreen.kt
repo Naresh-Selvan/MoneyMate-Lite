@@ -265,8 +265,7 @@ fun SettingsScreen(
                         Text(
                             text = "Check for Updates",
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            fontWeight = FontWeight.Bold
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
