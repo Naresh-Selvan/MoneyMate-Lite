@@ -57,7 +57,7 @@ class UpdateViewModel @Inject constructor(
 
     private suspend fun fetchUpdateInfo(): AppUpdateInfo? = withContext(Dispatchers.IO) {
         // Raw JSON from your repository's main branch to check updates
-        val spec = "https://raw.githubusercontent.com/Naresh-Selvan/MoneyMate-Lite/main/version.json"
+        val spec = "https://raw.githubusercontent.com/Naresh-Selvan/MoneyMate-Lite/master/version.json"
         var connection: HttpURLConnection? = null
         try {
             val url = URL(spec)
