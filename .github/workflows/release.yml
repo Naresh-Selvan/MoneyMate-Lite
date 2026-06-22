@@ -1,35 +1,60 @@
-name: Release APK
+name: Android GitHub Release Flow
+
 on:
-  release:
-    types: [created]
+  push:
+    tags:
+      - 'v*' # Triggers on tags starting with v (e.g. v1.0.0, v1.0.1)
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name for the release (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
 permissions:
   contents: write
+
 jobs:
   build:
+    name: Build & Release APK
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: .gemini/antigravity/scratch/MoneyMateLite
+
     steps:
-      - uses: actions/checkout@v4.2.2
-      - uses: actions/setup-java@v4.7.0
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
+          distribution: 'zulu'
           java-version: '17'
-          distribution: 'temurin'
-      - name: Decode keystore
+          cache: 'gradle'
+
+      - name: Grant Execute Permission to Gradlew
+        run: chmod +x gradlew
+
+      - name: Build Debug & Release APKs
+        run: ./gradlew assembleDebug assembleRelease --stacktrace
+
+      - name: Rename APKs for clarity
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > app/moneymate-release.jks
-      - name: Make gradlew executable
-        run: chmod +x ./gradlew
-      - name: Build Release APK
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          GRADLE_OPTS: "-Xmx4g"
-          LINT_PRINT_STACKTRACE: "true"
-        run: ./gradlew assembleRelease -x lintVitalAnalyzeRelease
-      - name: Upload APK to release
+          mkdir release-artifacts
+          cp app/build/outputs/apk/debug/app-debug.apk release-artifacts/MoneyMateLite-debug.apk
+          if [ -f app/build/outputs/apk/release/app-release-unsigned.apk ]; then
+            cp app/build/outputs/apk/release/app-release-unsigned.apk release-artifacts/MoneyMateLite-release.apk
+          else
+            cp app/build/outputs/apk/release/app-release.apk release-artifacts/MoneyMateLite-release.apk
+          fi
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: .gemini/antigravity/scratch/MoneyMateLite/app/build/outputs/apk/release/app-release.apk
+          tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
+          files: |
+            release-artifacts/MoneyMateLite-debug.apk
+            release-artifacts/MoneyMateLite-release.apk
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
