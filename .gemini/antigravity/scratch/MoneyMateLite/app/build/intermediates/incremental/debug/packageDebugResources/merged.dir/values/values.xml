@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <color name="ic_launcher_background">#004D40</color>
     <string name="app_name">MoneyMate Lite</string>
     <string name="default_web_client_id" translatable="false">172139607552-vsocr50i0nhf9j485sp3t2jvfe4rtkrm.apps.googleusercontent.com</string>
     <string name="gcm_defaultSenderId" translatable="false">172139607552</string>
