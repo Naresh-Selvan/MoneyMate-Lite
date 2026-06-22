@@ -75,4 +75,15 @@ class LoanRepository @Inject constructor(
     suspend fun getTotalOutstandingBalance(): Double = withContext(Dispatchers.IO) {
         paymentDao.getTotalOutstandingBalance()
     }
+
+    suspend fun softDeletePayment(id: Long) = withContext(Dispatchers.IO) {
+        paymentDao.softDelete(id)
+    }
+
+    suspend fun restorePayment(id: Long) = withContext(Dispatchers.IO) {
+        paymentDao.restorePayment(id)
+    }
+
+    fun getDeletedPaymentsByFile(fileId: Long): Flow<List<com.moneymate.lite.data.dao.DeletedPaymentWithPerson>> =
+        paymentDao.getDeletedPaymentsByFile(fileId)
 }

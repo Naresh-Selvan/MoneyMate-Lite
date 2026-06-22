@@ -11,6 +11,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
@@ -82,6 +83,31 @@ class LoanViewModel @Inject constructor(
             Result.success(id)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    fun deletePayment(id: Long) {
+        viewModelScope.launch {
+            repository.softDeletePayment(id)
+        }
+    }
+
+    fun restorePayment(id: Long) {
+        viewModelScope.launch {
+            repository.restorePayment(id)
+        }
+    }
+
+    private val deletedPaymentsCache = mutableMapOf<Long, StateFlow<List<com.moneymate.lite.data.dao.DeletedPaymentWithPerson>>>()
+
+    fun getDeletedPaymentsByFile(fileId: Long): StateFlow<List<com.moneymate.lite.data.dao.DeletedPaymentWithPerson>> {
+        return deletedPaymentsCache.getOrPut(fileId) {
+            repository.getDeletedPaymentsByFile(fileId)
+                .stateIn(
+                    scope = viewModelScope,
+                    started = SharingStarted.Eagerly,
+                    initialValue = emptyList()
+                )
         }
     }
 }

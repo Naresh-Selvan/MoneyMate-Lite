@@ -57,9 +57,6 @@ fun RecentlyDeletedScreen(
     viewModel: RecentlyDeletedViewModel = hiltViewModel()
 ) {
     val deletedFiles by viewModel.deletedFiles.collectAsState()
-    val deletedPersons by viewModel.deletedPersons.collectAsState()
-    var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf("Files", "Customers")
 
     Scaffold(
         topBar = {
@@ -80,31 +77,15 @@ fun RecentlyDeletedScreen(
             )
         }
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            TabRow(selectedTabIndex = selectedTab) {
-                tabs.forEachIndexed { index, title ->
-                    Tab(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        text = { Text(title, fontWeight = FontWeight.Bold) }
-                    )
-                }
-            }
-
-            when (selectedTab) {
-                0 -> DeletedFilesList(
-                    files = deletedFiles,
-                    onRestore = { viewModel.restoreFile(it) }
-                )
-                1 -> DeletedPersonsList(
-                    persons = deletedPersons,
-                    onRestore = { viewModel.restorePerson(it) }
-                )
-            }
+            DeletedFilesList(
+                files = deletedFiles,
+                onRestore = { viewModel.restoreFile(it) }
+            )
         }
     }
 }
@@ -171,74 +152,7 @@ private fun DeletedFilesList(
     }
 }
 
-@Composable
-private fun DeletedPersonsList(
-    persons: List<Person>,
-    onRestore: (Long) -> Unit
-) {
-    if (persons.isEmpty()) {
-        EmptyDeletedState(text = "No recently deleted customers")
-    } else {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(persons, key = { it.id }) { person ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.Person,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(end = 12.dp)
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = person.name,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            person.place?.let {
-                                Text(
-                                    text = it,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                        Button(
-                            onClick = { onRestore(person.id) },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.secondary
-                            ),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Restore,
-                                contentDescription = "Restore",
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Restore", style = MaterialTheme.typography.labelMedium)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
+
 
 @Composable
 private fun EmptyDeletedState(text: String) {

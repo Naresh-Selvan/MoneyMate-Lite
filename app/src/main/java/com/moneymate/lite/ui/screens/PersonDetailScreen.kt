@@ -17,9 +17,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Payment
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -33,6 +35,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -81,6 +84,7 @@ fun PersonDetailScreen(
     var showNewLoanDialog by remember { mutableStateOf(false) }
     var showRecordPaymentDialog by remember { mutableStateOf(false) }
     var expandedLoanId by remember { mutableStateOf<Long?>(null) }
+    var paymentToDelete by remember { mutableStateOf<Payment?>(null) }
 
     // Fetch person data once
     LaunchedEffect(personId) {
@@ -190,7 +194,8 @@ fun PersonDetailScreen(
                         dateFormat = dateFormat,
                         onToggle = {
                             expandedLoanId = if (expandedLoanId == loan.id) null else loan.id
-                        }
+                        },
+                        onDeletePayment = { paymentToDelete = it }
                     )
                 }
             }
@@ -224,6 +229,31 @@ fun PersonDetailScreen(
                 scope.launch {
                     val msg = if (wasCompleted) "Loan completed! 🎉" else "Payment recorded"
                     snackbarHostState.showSnackbar(msg)
+                }
+            }
+        )
+    }
+
+    if (paymentToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { paymentToDelete = null },
+            title = { Text("Delete Payment") },
+            text = { Text("Are you sure you want to delete this payment of ₹${"%.0f".format(paymentToDelete?.amount ?: 0.0)}? This will move it to recently deleted.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        paymentToDelete?.let { payment ->
+                            loanViewModel.deletePayment(payment.id)
+                        }
+                        paymentToDelete = null
+                    }
+                ) {
+                    Text("Delete", color = Color(0xFFE53935))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { paymentToDelete = null }) {
+                    Text("Cancel")
                 }
             }
         )
@@ -360,6 +390,7 @@ private fun LoanHistoryItem(
     isExpanded: Boolean,
     dateFormat: SimpleDateFormat,
     onToggle: () -> Unit,
+    onDeletePayment: (Payment) -> Unit,
     loanViewModel: LoanViewModel = hiltViewModel()
 ) {
     val payments by remember(loan.id) {
@@ -442,18 +473,33 @@ private fun LoanHistoryItem(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 2.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
                                     text = dateFormat.format(Date(payment.date)),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                Text(
-                                    text = "₹${"%.0f".format(payment.amount)}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Medium
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "₹${"%.0f".format(payment.amount)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    IconButton(
+                                        onClick = { onDeletePayment(payment) },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "Delete payment",
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

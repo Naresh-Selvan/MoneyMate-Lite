@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import com.moneymate.lite.data.entity.LoanFile
 import com.moneymate.lite.data.repository.LoanFileRepository
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
@@ -59,6 +60,25 @@ class PersonViewModel @Inject constructor(
                     scope = viewModelScope,
                     started = SharingStarted.Eagerly,
                     initialValue = null
+                )
+        }
+    }
+
+    fun restorePerson(id: Long) {
+        viewModelScope.launch {
+            repository.restorePerson(id)
+        }
+    }
+
+    private val deletedPersonsByFileCache = mutableMapOf<Long, StateFlow<List<Person>>>()
+
+    fun getDeletedPersonsByFile(fileId: Long): StateFlow<List<Person>> {
+        return deletedPersonsByFileCache.getOrPut(fileId) {
+            repository.getDeletedPersonsByFile(fileId)
+                .stateIn(
+                    scope = viewModelScope,
+                    started = SharingStarted.Eagerly,
+                    initialValue = emptyList()
                 )
         }
     }

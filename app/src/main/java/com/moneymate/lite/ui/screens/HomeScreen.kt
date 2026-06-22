@@ -19,9 +19,12 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -29,13 +32,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -67,8 +67,10 @@ fun HomeScreen(
 ) {
     val files by viewModel.files.collectAsState()
     var showAddDialog by remember { mutableStateOf(false) }
-    var newFileName by remember { mutableStateOf("") }
     var showLogoutConfirm by remember { mutableStateOf(false) }
+    var fileToDelete by remember { mutableStateOf<LoanFile?>(null) }
+    var fileToRename by remember { mutableStateOf<LoanFile?>(null) }
+    var renameText by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
     Scaffold(
@@ -130,7 +132,11 @@ fun HomeScreen(
                 ) { file ->
                     FileCard(
                         file = file,
-                        onDelete = { scope.launch { viewModel.deleteFile(file.id) } },
+                        onDelete = { fileToDelete = file },
+                        onRename = {
+                            fileToRename = file
+                            renameText = file.name
+                        },
                         onClick = {
                             navController.navigate("file_detail/${file.id}?name=${URLEncoder.encode(file.name, "UTF-8")}")
                         }
@@ -141,16 +147,17 @@ fun HomeScreen(
     }
 
     if (showAddDialog) {
+        var customName by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = {
                 showAddDialog = false
-                newFileName = ""
+                customName = ""
             },
             title = { Text("New File") },
             text = {
                 OutlinedTextField(
-                    value = newFileName,
-                    onValueChange = { newFileName = it },
+                    value = customName,
+                    onValueChange = { customName = it },
                     label = { Text("File name") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -159,13 +166,13 @@ fun HomeScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        if (newFileName.isNotBlank()) {
+                        if (customName.isNotBlank()) {
                             scope.launch {
-                                viewModel.addFile(newFileName.trim())
+                                viewModel.addFile(customName.trim())
                             }
                         }
                         showAddDialog = false
-                        newFileName = ""
+                        customName = ""
                     }
                 ) {
                     Text("Add")
@@ -174,7 +181,7 @@ fun HomeScreen(
             dismissButton = {
                 TextButton(onClick = {
                     showAddDialog = false
-                    newFileName = ""
+                    customName = ""
                 }) {
                     Text("Cancel")
                 }
@@ -207,68 +214,96 @@ fun HomeScreen(
             }
         )
     }
+
+    if (fileToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { fileToDelete = null },
+            title = { Text("Delete File") },
+            text = { Text("Are you sure you want to delete \"${fileToDelete?.name}\"? This will move it to recently deleted.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        fileToDelete?.let { file ->
+                            scope.launch { viewModel.deleteFile(file.id) }
+                        }
+                        fileToDelete = null
+                    }
+                ) {
+                    Text("Delete", color = Color(0xFFE53935))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { fileToDelete = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (fileToRename != null) {
+        var customRenameText by remember { mutableStateOf(renameText) }
+        AlertDialog(
+            onDismissRequest = { fileToRename = null },
+            title = { Text("Rename File") },
+            text = {
+                OutlinedTextField(
+                    value = customRenameText,
+                    onValueChange = { customRenameText = it },
+                    label = { Text("New file name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        fileToRename?.let { file ->
+                            if (customRenameText.isNotBlank()) {
+                                scope.launch { viewModel.renameFile(file.id, customRenameText.trim()) }
+                            }
+                        }
+                        fileToRename = null
+                    }
+                ) {
+                    Text("Rename")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { fileToRename = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FileCard(
     file: LoanFile,
     onDelete: () -> Unit,
+    onRename: () -> Unit,
     onClick: () -> Unit
 ) {
-    val scope = rememberCoroutineScope()
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { value ->
-            if (value == SwipeToDismissBoxValue.EndToStart) {
-                scope.launch { onDelete() }
-                true
-            } else {
-                false
-            }
-        }
-    )
+    var showMenu by remember { mutableStateOf(false) }
 
-    SwipeToDismissBox(
-        state = dismissState,
-        backgroundContent = {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        animateColorAsState(
-                            targetValue = when (dismissState.targetValue) {
-                                SwipeToDismissBoxValue.EndToStart -> Color(0xFFE53935)
-                                else -> Color.Transparent
-                            },
-                            label = "swipe_bg"
-                        ).value
-                    )
-                    .padding(horizontal = 24.dp),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Delete",
-                    tint = Color.White
-                )
-            }
-        },
-        enableDismissFromStartToEnd = false,
-        enableDismissFromEndToStart = true
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Card(
-            onClick = onClick,
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
             ) {
                 Icon(
                     Icons.Default.Description,
@@ -287,6 +322,35 @@ private fun FileCard(
                         text = "Tap to open",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
+            Box {
+                IconButton(onClick = { showMenu = true }) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = "Options",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Rename") },
+                        onClick = {
+                            showMenu = false
+                            onRename()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Delete", color = Color(0xFFE53935)) },
+                        onClick = {
+                            showMenu = false
+                            onDelete()
+                        }
                     )
                 }
             }

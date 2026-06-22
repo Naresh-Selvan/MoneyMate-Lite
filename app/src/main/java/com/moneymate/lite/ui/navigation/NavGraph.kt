@@ -24,6 +24,7 @@ import com.moneymate.lite.ui.screens.PersonDetailScreen
 import com.moneymate.lite.ui.screens.ReportsScreen
 import com.moneymate.lite.ui.screens.SettingsScreen
 import com.moneymate.lite.ui.screens.RecentlyDeletedScreen
+import com.moneymate.lite.ui.screens.FileTrashScreen
 import com.moneymate.lite.ui.screens.UpdateDialog
 import com.moneymate.lite.ui.viewmodel.AuthViewModel
 import com.moneymate.lite.ui.viewmodel.UpdateViewModel
@@ -114,6 +115,17 @@ fun NavGraph(navController: NavHostController) {
                 val personId = backStackEntry.arguments?.getLong("personId") ?: return@composable
                 PersonDetailScreen(
                     personId = personId,
+                    navController = navController
+                )
+            }
+
+            composable(
+                route = "file_trash/{fileId}",
+                arguments = listOf(navArgument("fileId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val fileId = backStackEntry.arguments?.getLong("fileId") ?: return@composable
+                FileTrashScreen(
+                    fileId = fileId,
                     navController = navController
                 )
             }

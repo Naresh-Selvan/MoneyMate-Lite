@@ -28,6 +28,9 @@ interface PersonDao {
     @Query("UPDATE persons SET isDeleted = 0 WHERE id = :id")
     suspend fun restorePerson(id: Long)
 
+    @Query("SELECT * FROM persons WHERE fileId = :fileId AND isDeleted = 1 ORDER BY createdAt DESC")
+    fun getDeletedPersonsByFile(fileId: Long): Flow<List<Person>>
+
     @Query("SELECT * FROM persons WHERE id = :id LIMIT 1")
     suspend fun getPersonById(id: Long): Person?
 }

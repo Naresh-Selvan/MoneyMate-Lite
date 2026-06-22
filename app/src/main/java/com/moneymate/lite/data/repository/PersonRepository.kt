@@ -32,6 +32,8 @@ class PersonRepository @Inject constructor(
         personDao.restorePerson(id)
     }
 
+    fun getDeletedPersonsByFile(fileId: Long): Flow<List<Person>> = personDao.getDeletedPersonsByFile(fileId)
+
     suspend fun getPersonById(id: Long): Person? = withContext(Dispatchers.IO) {
         personDao.getPersonById(id)
     }
