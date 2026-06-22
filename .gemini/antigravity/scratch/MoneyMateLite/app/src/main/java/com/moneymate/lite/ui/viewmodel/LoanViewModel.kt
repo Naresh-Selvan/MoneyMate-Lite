@@ -1,0 +1,87 @@
+package com.moneymate.lite.ui.viewmodel
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.moneymate.lite.data.dao.LoanWithBalance
+import com.moneymate.lite.data.dao.LoanWithBalanceAndFile
+import com.moneymate.lite.data.entity.Loan
+import com.moneymate.lite.data.entity.Payment
+import com.moneymate.lite.data.repository.LoanRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
+import javax.inject.Inject
+
+@HiltViewModel
+class LoanViewModel @Inject constructor(
+    private val repository: LoanRepository
+) : ViewModel() {
+
+    // Caches to prevent creating new StateFlows on every recomposition
+    // Use Eagerly so flows never stop and never reset to initial null/emptyList (prevents flickering)
+    private val activeLoansInFileCache = mutableMapOf<Long, StateFlow<List<LoanWithBalance>>>()
+    private val loansByPersonCache = mutableMapOf<Long, StateFlow<List<Loan>>>()
+    private val activeLoanByPersonCache = mutableMapOf<Long, StateFlow<Loan?>>()
+    private val paymentsByLoanCache = mutableMapOf<Long, StateFlow<List<Payment>>>()
+
+    fun getActiveLoansInFile(fileId: Long): StateFlow<List<LoanWithBalance>> {
+        return activeLoansInFileCache.getOrPut(fileId) {
+            repository.getAllActiveLoansInFile(fileId)
+                .stateIn(
+                    scope = viewModelScope,
+                    started = SharingStarted.Eagerly,
+                    initialValue = emptyList()
+                )
+        }
+    }
+
+    val allActiveLoans: StateFlow<List<LoanWithBalanceAndFile>> = repository.getAllActiveLoansAcrossFiles()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = emptyList()
+        )
+
+    fun getLoansByPerson(personId: Long): StateFlow<List<Loan>> {
+        return loansByPersonCache.getOrPut(personId) {
+            repository.getLoansByPerson(personId)
+                .stateIn(
+                    scope = viewModelScope,
+                    started = SharingStarted.Eagerly,
+                    initialValue = emptyList()
+                )
+        }
+    }
+
+    fun getActiveLoanFlow(personId: Long): StateFlow<Loan?> {
+        return activeLoanByPersonCache.getOrPut(personId) {
+            repository.getActiveLoanByPersonFlow(personId)
+                .stateIn(
+                    scope = viewModelScope,
+                    started = SharingStarted.Eagerly,
+                    initialValue = null
+                )
+        }
+    }
+
+    fun getPaymentsByLoan(loanId: Long): StateFlow<List<Payment>> {
+        return paymentsByLoanCache.getOrPut(loanId) {
+            repository.getPaymentsByLoan(loanId)
+                .stateIn(
+                    scope = viewModelScope,
+                    started = SharingStarted.Eagerly,
+                    initialValue = emptyList()
+                )
+        }
+    }
+
+    suspend fun createLoan(personId: Long, totalAmount: Double, dateGiven: Long): Result<Long> {
+        return try {
+            val id = repository.createLoan(personId, totalAmount, dateGiven)
+            Result.success(id)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+}
