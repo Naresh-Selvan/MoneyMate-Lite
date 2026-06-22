@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 4,
-  "latestVersionName": "1.0.4",
+  "latestVersionCode": 3,
+  "latestVersionName": "1.0.3",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
   "changelog": "UI visibility improvements, Settings scroll fixes, and internet permission for update checks."
 }
