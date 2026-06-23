@@ -28,6 +28,9 @@ class AuthViewModel @Inject constructor(
     init {
         auth.addAuthStateListener { firebaseAuth ->
             _currentUser.value = firebaseAuth.currentUser
+            if (firebaseAuth.currentUser != null) {
+                setOfflineMode(false)
+            }
         }
     }
 
