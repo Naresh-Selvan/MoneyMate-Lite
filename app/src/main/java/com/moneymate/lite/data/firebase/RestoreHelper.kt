@@ -31,69 +31,103 @@ class RestoreHelper @Inject constructor() {
                 ?: throw IllegalStateException("User not authenticated")
             val db = FirebaseFirestore.getInstance()
 
-            val filesSnapshot = db.collection("files").document(userId)
-                .collection("loan_files").get().await()
+            val uidsToTry = mutableListOf(userId)
+            if (userId.startsWith("O", ignoreCase = true)) {
+                val alt = "0" + userId.substring(1)
+                uidsToTry.add(alt)
+            } else if (userId.startsWith("0")) {
+                val alt = "O" + userId.substring(1)
+                uidsToTry.add(alt)
+                val altLower = "o" + userId.substring(1)
+                uidsToTry.add(altLower)
+            }
 
-            for (fileDoc in filesSnapshot.documents) {
-                val file = LoanFile(
-                    id = safeGetLong(fileDoc, "id"),
-                    name = fileDoc.getString("name") ?: "",
-                    createdAt = safeGetLong(fileDoc, "createdAt"),
-                    isDeleted = safeGetBoolean(fileDoc, "isDeleted")
-                )
-                loanFileRepository.insert(file)
+            val rootCollections = listOf("files", "users")
+            val subCollections = listOf("loan_files", "files")
+            
+            var restoredFilesCount = 0
 
-                val personsSnapshot = fileDoc.reference
-                    .collection("persons").get().await()
+            for (root in rootCollections) {
+                for (targetUid in uidsToTry) {
+                    for (sub in subCollections) {
+                        try {
+                            val filesSnapshot = db.collection(root).document(targetUid)
+                                .collection(sub).get().await()
 
-                for (personDoc in personsSnapshot.documents) {
-                    val person = Person(
-                        id = safeGetLong(personDoc, "id"),
-                        fileId = safeGetLong(personDoc, "fileId"),
-                        name = personDoc.getString("name") ?: "",
-                        mobileNumber = personDoc.getString("mobileNumber"),
-                        place = personDoc.getString("place"),
-                        notes = personDoc.getString("notes"),
-                        sortOrder = safeGetLong(personDoc, "sortOrder").toInt(),
-                        createdAt = safeGetLong(personDoc, "createdAt"),
-                        isDeleted = safeGetBoolean(personDoc, "isDeleted")
-                    )
-                    personRepository.insert(person)
+                            if (filesSnapshot.isEmpty) continue
 
-                    val loansSnapshot = personDoc.reference
-                        .collection("loans").get().await()
+                            for (fileDoc in filesSnapshot.documents) {
+                                val file = LoanFile(
+                                    id = safeGetLong(fileDoc, "id"),
+                                    name = fileDoc.getString("name") ?: "",
+                                    createdAt = safeGetLong(fileDoc, "createdAt"),
+                                    isDeleted = safeGetBoolean(fileDoc, "isDeleted")
+                                )
+                                loanFileRepository.insert(file)
+                                restoredFilesCount++
 
-                    for (loanDoc in loansSnapshot.documents) {
-                        val loan = Loan(
-                            id = safeGetLong(loanDoc, "id"),
-                            personId = safeGetLong(loanDoc, "personId"),
-                            totalAmount = safeGetDouble(loanDoc, "totalAmount"),
-                            dateGiven = safeGetLong(loanDoc, "dateGiven"),
-                            isCompleted = safeGetBoolean(loanDoc, "isCompleted"),
-                            completedAt = safeGetTimestampLong(loanDoc, "completedAt"),
-                            createdAt = safeGetLong(loanDoc, "createdAt"),
-                            isDeleted = safeGetBoolean(loanDoc, "isDeleted")
-                        )
-                        loanRepository.insertLoan(loan)
+                                val personsSnapshot = fileDoc.reference
+                                    .collection("persons").get().await()
 
-                        val paymentsSnapshot = loanDoc.reference
-                            .collection("payments").get().await()
+                                for (personDoc in personsSnapshot.documents) {
+                                    val person = Person(
+                                        id = safeGetLong(personDoc, "id"),
+                                        fileId = safeGetLong(personDoc, "fileId"),
+                                        name = personDoc.getString("name") ?: "",
+                                        mobileNumber = personDoc.getString("mobileNumber"),
+                                        place = personDoc.getString("place"),
+                                        notes = personDoc.getString("notes"),
+                                        sortOrder = safeGetLong(personDoc, "sortOrder").toInt(),
+                                        createdAt = safeGetLong(personDoc, "createdAt"),
+                                        isDeleted = safeGetBoolean(personDoc, "isDeleted")
+                                    )
+                                    personRepository.insert(person)
 
-                        for (paymentDoc in paymentsSnapshot.documents) {
-                            val payment = Payment(
-                                id = safeGetLong(paymentDoc, "id"),
-                                loanId = safeGetLong(paymentDoc, "loanId"),
-                                amount = safeGetDouble(paymentDoc, "amount"),
-                                date = safeGetLong(paymentDoc, "date"),
-                                createdAt = safeGetLong(paymentDoc, "createdAt"),
-                                isDeleted = safeGetBoolean(paymentDoc, "isDeleted")
-                            )
-                            paymentRepository.insert(payment)
+                                    val loansSnapshot = personDoc.reference
+                                        .collection("loans").get().await()
+
+                                    for (loanDoc in loansSnapshot.documents) {
+                                        val loan = Loan(
+                                            id = safeGetLong(loanDoc, "id"),
+                                            personId = safeGetLong(loanDoc, "personId"),
+                                            totalAmount = safeGetDouble(loanDoc, "totalAmount"),
+                                            dateGiven = safeGetLong(loanDoc, "dateGiven"),
+                                            isCompleted = safeGetBoolean(loanDoc, "isCompleted"),
+                                            completedAt = safeGetTimestampLong(loanDoc, "completedAt"),
+                                            createdAt = safeGetLong(loanDoc, "createdAt"),
+                                            isDeleted = safeGetBoolean(loanDoc, "isDeleted")
+                                        )
+                                        loanRepository.insertLoan(loan)
+
+                                        val paymentsSnapshot = loanDoc.reference
+                                            .collection("payments").get().await()
+
+                                        for (paymentDoc in paymentsSnapshot.documents) {
+                                            val payment = Payment(
+                                                id = safeGetLong(paymentDoc, "id"),
+                                                loanId = safeGetLong(paymentDoc, "loanId"),
+                                                amount = safeGetDouble(paymentDoc, "amount"),
+                                                date = safeGetLong(paymentDoc, "date"),
+                                                createdAt = safeGetLong(paymentDoc, "createdAt"),
+                                                isDeleted = safeGetBoolean(paymentDoc, "isDeleted")
+                                            )
+                                            paymentRepository.insert(payment)
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.w("RestoreHelper", "Failed querying path: $root/$targetUid/$sub: ${e.message}")
                         }
                     }
                 }
             }
-            Result.success(Unit)
+
+            if (restoredFilesCount == 0) {
+                Result.failure(Exception("No backup files found in the cloud for this account. Please verify you are logged into the correct Google Account."))
+            } else {
+                Result.success(Unit)
+            }
         } catch (e: Exception) {
             Result.failure(e)
         }
