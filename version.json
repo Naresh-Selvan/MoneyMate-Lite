@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 5,
-  "latestVersionName": "1.0.5",
+  "latestVersionCode": 6,
+  "latestVersionName": "1.0.6",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Customer list pagination, view and edit transactions by date, and contacts picker integration."
+  "changelog": "Fix resilient database restore from cloud backups. Customer list pagination, view and edit transactions by date, and contacts picker integration."
 }
