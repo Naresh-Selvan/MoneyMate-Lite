@@ -1,6 +1,7 @@
 package com.moneymate.lite.data.firebase
 
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.moneymate.lite.data.entity.Loan
 import com.moneymate.lite.data.entity.LoanFile
@@ -34,28 +35,59 @@ class RestoreHelper @Inject constructor() {
                 .collection("loan_files").get().await()
 
             for (fileDoc in filesSnapshot.documents) {
-                val file = fileDoc.toObject(LoanFile::class.java) ?: continue
+                val file = LoanFile(
+                    id = safeGetLong(fileDoc, "id"),
+                    name = fileDoc.getString("name") ?: "",
+                    createdAt = safeGetLong(fileDoc, "createdAt"),
+                    isDeleted = safeGetBoolean(fileDoc, "isDeleted")
+                )
                 loanFileRepository.insert(file)
 
                 val personsSnapshot = fileDoc.reference
                     .collection("persons").get().await()
 
                 for (personDoc in personsSnapshot.documents) {
-                    val person = personDoc.toObject(Person::class.java) ?: continue
+                    val person = Person(
+                        id = safeGetLong(personDoc, "id"),
+                        fileId = safeGetLong(personDoc, "fileId"),
+                        name = personDoc.getString("name") ?: "",
+                        mobileNumber = personDoc.getString("mobileNumber"),
+                        place = personDoc.getString("place"),
+                        notes = personDoc.getString("notes"),
+                        sortOrder = safeGetLong(personDoc, "sortOrder").toInt(),
+                        createdAt = safeGetLong(personDoc, "createdAt"),
+                        isDeleted = safeGetBoolean(personDoc, "isDeleted")
+                    )
                     personRepository.insert(person)
 
                     val loansSnapshot = personDoc.reference
                         .collection("loans").get().await()
 
                     for (loanDoc in loansSnapshot.documents) {
-                        val loan = loanDoc.toObject(Loan::class.java) ?: continue
+                        val loan = Loan(
+                            id = safeGetLong(loanDoc, "id"),
+                            personId = safeGetLong(loanDoc, "personId"),
+                            totalAmount = safeGetDouble(loanDoc, "totalAmount"),
+                            dateGiven = safeGetLong(loanDoc, "dateGiven"),
+                            isCompleted = safeGetBoolean(loanDoc, "isCompleted"),
+                            completedAt = safeGetTimestampLong(loanDoc, "completedAt"),
+                            createdAt = safeGetLong(loanDoc, "createdAt"),
+                            isDeleted = safeGetBoolean(loanDoc, "isDeleted")
+                        )
                         loanRepository.insertLoan(loan)
 
                         val paymentsSnapshot = loanDoc.reference
                             .collection("payments").get().await()
 
                         for (paymentDoc in paymentsSnapshot.documents) {
-                            val payment = paymentDoc.toObject(Payment::class.java) ?: continue
+                            val payment = Payment(
+                                id = safeGetLong(paymentDoc, "id"),
+                                loanId = safeGetLong(paymentDoc, "loanId"),
+                                amount = safeGetDouble(paymentDoc, "amount"),
+                                date = safeGetLong(paymentDoc, "date"),
+                                createdAt = safeGetLong(paymentDoc, "createdAt"),
+                                isDeleted = safeGetBoolean(paymentDoc, "isDeleted")
+                            )
                             paymentRepository.insert(payment)
                         }
                     }
@@ -64,6 +96,40 @@ class RestoreHelper @Inject constructor() {
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    private fun safeGetLong(doc: DocumentSnapshot, field: String): Long {
+        return when (val value = doc.get(field)) {
+            is Number -> value.toLong()
+            is String -> value.toLongOrNull() ?: 0L
+            else -> 0L
+        }
+    }
+
+    private fun safeGetDouble(doc: DocumentSnapshot, field: String): Double {
+        return when (val value = doc.get(field)) {
+            is Number -> value.toDouble()
+            is String -> value.toDoubleOrNull() ?: 0.0
+            else -> 0.0
+        }
+    }
+
+    private fun safeGetBoolean(doc: DocumentSnapshot, field: String): Boolean {
+        return when (val value = doc.get(field)) {
+            is Boolean -> value
+            is String -> value.toBoolean()
+            is Number -> value.toInt() == 1
+            else -> false
+        }
+    }
+
+    private fun safeGetTimestampLong(doc: DocumentSnapshot, field: String): Long? {
+        return when (val value = doc.get(field)) {
+            is Number -> value.toLong()
+            is com.google.firebase.Timestamp -> value.toDate().time
+            is String -> value.toLongOrNull()
+            else -> null
         }
     }
 }

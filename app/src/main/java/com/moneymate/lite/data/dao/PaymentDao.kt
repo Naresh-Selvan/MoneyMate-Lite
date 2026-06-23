@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import com.moneymate.lite.data.entity.Payment
 import kotlinx.coroutines.flow.Flow
 
@@ -43,6 +44,29 @@ interface PaymentDao {
         ORDER BY p.createdAt DESC
     """)
     fun getDeletedPaymentsByFile(fileId: Long): Flow<List<DeletedPaymentWithPerson>>
+
+    @Update
+    suspend fun update(payment: Payment)
+
+    @Query("SELECT * FROM payments WHERE id = :id LIMIT 1")
+    suspend fun getPaymentById(id: Long): Payment?
+
+    @Query("""
+        SELECT 
+            payments.id AS id, 
+            persons.id AS personId, 
+            persons.name AS personName, 
+            payments.amount AS amount, 
+            payments.date AS date
+        FROM payments
+        INNER JOIN loans ON payments.loanId = loans.id
+        INNER JOIN persons ON loans.personId = persons.id
+        WHERE persons.fileId = :fileId 
+          AND payments.isDeleted = 0 
+          AND loans.isDeleted = 0
+          AND payments.date BETWEEN :startOfDay AND :endOfDay
+    """)
+    fun getPaymentsReceivedOnDate(fileId: Long, startOfDay: Long, endOfDay: Long): Flow<List<DateTransactionEntity>>
 }
 
 data class DeletedPaymentWithPerson(

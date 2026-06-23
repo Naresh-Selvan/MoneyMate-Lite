@@ -5,6 +5,7 @@ import com.moneymate.lite.data.dao.LoanDao
 import com.moneymate.lite.data.dao.LoanWithBalance
 import com.moneymate.lite.data.dao.LoanWithBalanceAndFile
 import com.moneymate.lite.data.dao.PaymentDao
+import com.moneymate.lite.data.dao.DateTransactionEntity
 import com.moneymate.lite.data.entity.Loan
 import com.moneymate.lite.data.entity.Payment
 import kotlinx.coroutines.Dispatchers
@@ -86,4 +87,101 @@ class LoanRepository @Inject constructor(
 
     fun getDeletedPaymentsByFile(fileId: Long): Flow<List<com.moneymate.lite.data.dao.DeletedPaymentWithPerson>> =
         paymentDao.getDeletedPaymentsByFile(fileId)
+
+    fun getLoansGivenOnDate(fileId: Long, startOfDay: Long, endOfDay: Long): Flow<List<DateTransactionEntity>> =
+        loanDao.getLoansGivenOnDate(fileId, startOfDay, endOfDay)
+
+    fun getPaymentsReceivedOnDate(fileId: Long, startOfDay: Long, endOfDay: Long): Flow<List<DateTransactionEntity>> =
+        paymentDao.getPaymentsReceivedOnDate(fileId, startOfDay, endOfDay)
+
+    @Transaction
+    suspend fun addGivenTransaction(personId: Long, amount: Double, date: Long) = withContext(Dispatchers.IO) {
+        val activeLoan = loanDao.getActiveLoanByPerson(personId)
+        if (activeLoan != null) {
+            val updatedLoan = activeLoan.copy(totalAmount = activeLoan.totalAmount + amount)
+            loanDao.update(updatedLoan)
+            
+            val totalPaid = paymentDao.getTotalPaidForLoan(activeLoan.id)
+            if (totalPaid >= updatedLoan.totalAmount) {
+                if (!activeLoan.isCompleted) {
+                    loanDao.markCompleted(activeLoan.id, System.currentTimeMillis())
+                }
+            } else {
+                if (activeLoan.isCompleted) {
+                    loanDao.markIncomplete(activeLoan.id)
+                }
+            }
+        } else {
+            loanDao.insert(
+                Loan(
+                    personId = personId,
+                    totalAmount = amount,
+                    dateGiven = date
+                )
+            )
+        }
+    }
+
+    @Transaction
+    suspend fun addReceivedTransaction(personId: Long, amount: Double, date: Long) = withContext(Dispatchers.IO) {
+        val activeLoan = loanDao.getActiveLoanByPerson(personId)
+            ?: throw IllegalStateException("No active loan found for this customer.")
+        
+        paymentDao.insert(
+            Payment(
+                loanId = activeLoan.id,
+                amount = amount,
+                date = date
+            )
+        )
+        
+        val totalPaid = paymentDao.getTotalPaidForLoan(activeLoan.id)
+        if (totalPaid >= activeLoan.totalAmount) {
+            loanDao.markCompleted(activeLoan.id, System.currentTimeMillis())
+        }
+    }
+
+    @Transaction
+    suspend fun updateLoanAmount(loanId: Long, newAmount: Double) = withContext(Dispatchers.IO) {
+        val loan = loanDao.getLoanById(loanId) ?: return@withContext
+        val updatedLoan = loan.copy(totalAmount = newAmount)
+        loanDao.update(updatedLoan)
+        
+        val totalPaid = paymentDao.getTotalPaidForLoan(loanId)
+        if (totalPaid >= newAmount) {
+            if (!loan.isCompleted) {
+                loanDao.markCompleted(loanId, System.currentTimeMillis())
+            }
+        } else {
+            if (loan.isCompleted) {
+                loanDao.markIncomplete(loanId)
+            }
+        }
+    }
+
+    @Transaction
+    suspend fun updatePaymentAmount(paymentId: Long, newAmount: Double) = withContext(Dispatchers.IO) {
+        val payment = paymentDao.getPaymentById(paymentId) ?: return@withContext
+        val updatedPayment = payment.copy(amount = newAmount)
+        paymentDao.update(updatedPayment)
+        
+        val loanId = payment.loanId
+        val loan = loanDao.getLoanById(loanId)
+        if (loan != null) {
+            val totalPaid = paymentDao.getTotalPaidForLoan(loanId)
+            if (totalPaid >= loan.totalAmount) {
+                if (!loan.isCompleted) {
+                    loanDao.markCompleted(loanId, System.currentTimeMillis())
+                }
+            } else {
+                if (loan.isCompleted) {
+                    loanDao.markIncomplete(loanId)
+                }
+            }
+        }
+    }
+
+    suspend fun softDeleteLoan(id: Long) = withContext(Dispatchers.IO) {
+        loanDao.softDeleteLoan(id)
+    }
 }

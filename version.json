@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 4,
-  "latestVersionName": "1.0.4",
+  "latestVersionCode": 5,
+  "latestVersionName": "1.0.5",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "UI visibility improvements, Settings scroll fixes, and internet permission for update checks."
+  "changelog": "Customer list pagination, view and edit transactions by date, and contacts picker integration."
 }

@@ -41,6 +41,10 @@ public final class LoanDao_Impl implements LoanDao {
 
   private final SharedSQLiteStatement __preparedStmtOfMarkCompleted;
 
+  private final SharedSQLiteStatement __preparedStmtOfMarkIncomplete;
+
+  private final SharedSQLiteStatement __preparedStmtOfSoftDeleteLoan;
+
   public LoanDao_Impl(@NonNull final RoomDatabase __db) {
     this.__db = __db;
     this.__insertionAdapterOfLoan = new EntityInsertionAdapter<Loan>(__db) {
@@ -101,6 +105,22 @@ public final class LoanDao_Impl implements LoanDao {
       @NonNull
       public String createQuery() {
         final String _query = "UPDATE loans SET isCompleted = 1, completedAt = ? WHERE id = ?";
+        return _query;
+      }
+    };
+    this.__preparedStmtOfMarkIncomplete = new SharedSQLiteStatement(__db) {
+      @Override
+      @NonNull
+      public String createQuery() {
+        final String _query = "UPDATE loans SET isCompleted = 0, completedAt = null WHERE id = ?";
+        return _query;
+      }
+    };
+    this.__preparedStmtOfSoftDeleteLoan = new SharedSQLiteStatement(__db) {
+      @Override
+      @NonNull
+      public String createQuery() {
+        final String _query = "UPDATE loans SET isDeleted = 1 WHERE id = ?";
         return _query;
       }
     };
@@ -165,6 +185,56 @@ public final class LoanDao_Impl implements LoanDao {
           }
         } finally {
           __preparedStmtOfMarkCompleted.release(_stmt);
+        }
+      }
+    }, $completion);
+  }
+
+  @Override
+  public Object markIncomplete(final long loanId, final Continuation<? super Unit> $completion) {
+    return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
+      @Override
+      @NonNull
+      public Unit call() throws Exception {
+        final SupportSQLiteStatement _stmt = __preparedStmtOfMarkIncomplete.acquire();
+        int _argIndex = 1;
+        _stmt.bindLong(_argIndex, loanId);
+        try {
+          __db.beginTransaction();
+          try {
+            _stmt.executeUpdateDelete();
+            __db.setTransactionSuccessful();
+            return Unit.INSTANCE;
+          } finally {
+            __db.endTransaction();
+          }
+        } finally {
+          __preparedStmtOfMarkIncomplete.release(_stmt);
+        }
+      }
+    }, $completion);
+  }
+
+  @Override
+  public Object softDeleteLoan(final long id, final Continuation<? super Unit> $completion) {
+    return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
+      @Override
+      @NonNull
+      public Unit call() throws Exception {
+        final SupportSQLiteStatement _stmt = __preparedStmtOfSoftDeleteLoan.acquire();
+        int _argIndex = 1;
+        _stmt.bindLong(_argIndex, id);
+        try {
+          __db.beginTransaction();
+          try {
+            _stmt.executeUpdateDelete();
+            __db.setTransactionSuccessful();
+            return Unit.INSTANCE;
+          } finally {
+            __db.endTransaction();
+          }
+        } finally {
+          __preparedStmtOfSoftDeleteLoan.release(_stmt);
         }
       }
     }, $completion);
@@ -537,6 +607,70 @@ public final class LoanDao_Impl implements LoanDao {
             final String _tmpFileName;
             _tmpFileName = _cursor.getString(_cursorIndexOfFileName);
             _item = new LoanWithBalanceAndFile(_tmpLoanId,_tmpPersonId,_tmpPersonName,_tmpTotalAmount,_tmpTotalPaid,_tmpBalance,_tmpDateGiven,_tmpFileName);
+            _result.add(_item);
+          }
+          return _result;
+        } finally {
+          _cursor.close();
+        }
+      }
+
+      @Override
+      protected void finalize() {
+        _statement.release();
+      }
+    });
+  }
+
+  @Override
+  public Flow<List<DateTransactionEntity>> getLoansGivenOnDate(final long fileId,
+      final long startOfDay, final long endOfDay) {
+    final String _sql = "\n"
+            + "        SELECT \n"
+            + "            loans.id AS id, \n"
+            + "            loans.personId AS personId, \n"
+            + "            persons.name AS personName, \n"
+            + "            loans.totalAmount AS amount, \n"
+            + "            loans.dateGiven AS date\n"
+            + "        FROM loans\n"
+            + "        INNER JOIN persons ON loans.personId = persons.id\n"
+            + "        WHERE persons.fileId = ? \n"
+            + "          AND loans.isDeleted = 0 \n"
+            + "          AND loans.dateGiven BETWEEN ? AND ?\n"
+            + "    ";
+    final RoomSQLiteQuery _statement = RoomSQLiteQuery.acquire(_sql, 3);
+    int _argIndex = 1;
+    _statement.bindLong(_argIndex, fileId);
+    _argIndex = 2;
+    _statement.bindLong(_argIndex, startOfDay);
+    _argIndex = 3;
+    _statement.bindLong(_argIndex, endOfDay);
+    return CoroutinesRoom.createFlow(__db, false, new String[] {"loans",
+        "persons"}, new Callable<List<DateTransactionEntity>>() {
+      @Override
+      @NonNull
+      public List<DateTransactionEntity> call() throws Exception {
+        final Cursor _cursor = DBUtil.query(__db, _statement, false, null);
+        try {
+          final int _cursorIndexOfId = 0;
+          final int _cursorIndexOfPersonId = 1;
+          final int _cursorIndexOfPersonName = 2;
+          final int _cursorIndexOfAmount = 3;
+          final int _cursorIndexOfDate = 4;
+          final List<DateTransactionEntity> _result = new ArrayList<DateTransactionEntity>(_cursor.getCount());
+          while (_cursor.moveToNext()) {
+            final DateTransactionEntity _item;
+            final long _tmpId;
+            _tmpId = _cursor.getLong(_cursorIndexOfId);
+            final long _tmpPersonId;
+            _tmpPersonId = _cursor.getLong(_cursorIndexOfPersonId);
+            final String _tmpPersonName;
+            _tmpPersonName = _cursor.getString(_cursorIndexOfPersonName);
+            final double _tmpAmount;
+            _tmpAmount = _cursor.getDouble(_cursorIndexOfAmount);
+            final long _tmpDate;
+            _tmpDate = _cursor.getLong(_cursorIndexOfDate);
+            _item = new DateTransactionEntity(_tmpId,_tmpPersonId,_tmpPersonName,_tmpAmount,_tmpDate);
             _result.add(_item);
           }
           return _result;

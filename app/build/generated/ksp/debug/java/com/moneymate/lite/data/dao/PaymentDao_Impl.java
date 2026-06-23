@@ -3,7 +3,9 @@ package com.moneymate.lite.data.dao;
 import android.database.Cursor;
 import android.os.CancellationSignal;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.room.CoroutinesRoom;
+import androidx.room.EntityDeletionOrUpdateAdapter;
 import androidx.room.EntityInsertionAdapter;
 import androidx.room.RoomDatabase;
 import androidx.room.RoomSQLiteQuery;
@@ -36,6 +38,8 @@ public final class PaymentDao_Impl implements PaymentDao {
 
   private final EntityInsertionAdapter<Payment> __insertionAdapterOfPayment;
 
+  private final EntityDeletionOrUpdateAdapter<Payment> __updateAdapterOfPayment;
+
   private final SharedSQLiteStatement __preparedStmtOfSoftDelete;
 
   private final SharedSQLiteStatement __preparedStmtOfRestorePayment;
@@ -59,6 +63,26 @@ public final class PaymentDao_Impl implements PaymentDao {
         statement.bindLong(5, entity.getCreatedAt());
         final int _tmp = entity.isDeleted() ? 1 : 0;
         statement.bindLong(6, _tmp);
+      }
+    };
+    this.__updateAdapterOfPayment = new EntityDeletionOrUpdateAdapter<Payment>(__db) {
+      @Override
+      @NonNull
+      protected String createQuery() {
+        return "UPDATE OR ABORT `payments` SET `id` = ?,`loanId` = ?,`amount` = ?,`date` = ?,`createdAt` = ?,`isDeleted` = ? WHERE `id` = ?";
+      }
+
+      @Override
+      protected void bind(@NonNull final SupportSQLiteStatement statement,
+          @NonNull final Payment entity) {
+        statement.bindLong(1, entity.getId());
+        statement.bindLong(2, entity.getLoanId());
+        statement.bindDouble(3, entity.getAmount());
+        statement.bindLong(4, entity.getDate());
+        statement.bindLong(5, entity.getCreatedAt());
+        final int _tmp = entity.isDeleted() ? 1 : 0;
+        statement.bindLong(6, _tmp);
+        statement.bindLong(7, entity.getId());
       }
     };
     this.__preparedStmtOfSoftDelete = new SharedSQLiteStatement(__db) {
@@ -90,6 +114,24 @@ public final class PaymentDao_Impl implements PaymentDao {
           final Long _result = __insertionAdapterOfPayment.insertAndReturnId(payment);
           __db.setTransactionSuccessful();
           return _result;
+        } finally {
+          __db.endTransaction();
+        }
+      }
+    }, $completion);
+  }
+
+  @Override
+  public Object update(final Payment payment, final Continuation<? super Unit> $completion) {
+    return CoroutinesRoom.execute(__db, true, new Callable<Unit>() {
+      @Override
+      @NonNull
+      public Unit call() throws Exception {
+        __db.beginTransaction();
+        try {
+          __updateAdapterOfPayment.handle(payment);
+          __db.setTransactionSuccessful();
+          return Unit.INSTANCE;
         } finally {
           __db.endTransaction();
         }
@@ -336,6 +378,120 @@ public final class PaymentDao_Impl implements PaymentDao {
             final long _tmpLoanId;
             _tmpLoanId = _cursor.getLong(_cursorIndexOfLoanId);
             _item = new DeletedPaymentWithPerson(_tmpId,_tmpAmount,_tmpDate,_tmpPersonName,_tmpPersonId,_tmpLoanId);
+            _result.add(_item);
+          }
+          return _result;
+        } finally {
+          _cursor.close();
+        }
+      }
+
+      @Override
+      protected void finalize() {
+        _statement.release();
+      }
+    });
+  }
+
+  @Override
+  public Object getPaymentById(final long id, final Continuation<? super Payment> $completion) {
+    final String _sql = "SELECT * FROM payments WHERE id = ? LIMIT 1";
+    final RoomSQLiteQuery _statement = RoomSQLiteQuery.acquire(_sql, 1);
+    int _argIndex = 1;
+    _statement.bindLong(_argIndex, id);
+    final CancellationSignal _cancellationSignal = DBUtil.createCancellationSignal();
+    return CoroutinesRoom.execute(__db, false, _cancellationSignal, new Callable<Payment>() {
+      @Override
+      @Nullable
+      public Payment call() throws Exception {
+        final Cursor _cursor = DBUtil.query(__db, _statement, false, null);
+        try {
+          final int _cursorIndexOfId = CursorUtil.getColumnIndexOrThrow(_cursor, "id");
+          final int _cursorIndexOfLoanId = CursorUtil.getColumnIndexOrThrow(_cursor, "loanId");
+          final int _cursorIndexOfAmount = CursorUtil.getColumnIndexOrThrow(_cursor, "amount");
+          final int _cursorIndexOfDate = CursorUtil.getColumnIndexOrThrow(_cursor, "date");
+          final int _cursorIndexOfCreatedAt = CursorUtil.getColumnIndexOrThrow(_cursor, "createdAt");
+          final int _cursorIndexOfIsDeleted = CursorUtil.getColumnIndexOrThrow(_cursor, "isDeleted");
+          final Payment _result;
+          if (_cursor.moveToFirst()) {
+            final long _tmpId;
+            _tmpId = _cursor.getLong(_cursorIndexOfId);
+            final long _tmpLoanId;
+            _tmpLoanId = _cursor.getLong(_cursorIndexOfLoanId);
+            final double _tmpAmount;
+            _tmpAmount = _cursor.getDouble(_cursorIndexOfAmount);
+            final long _tmpDate;
+            _tmpDate = _cursor.getLong(_cursorIndexOfDate);
+            final long _tmpCreatedAt;
+            _tmpCreatedAt = _cursor.getLong(_cursorIndexOfCreatedAt);
+            final boolean _tmpIsDeleted;
+            final int _tmp;
+            _tmp = _cursor.getInt(_cursorIndexOfIsDeleted);
+            _tmpIsDeleted = _tmp != 0;
+            _result = new Payment(_tmpId,_tmpLoanId,_tmpAmount,_tmpDate,_tmpCreatedAt,_tmpIsDeleted);
+          } else {
+            _result = null;
+          }
+          return _result;
+        } finally {
+          _cursor.close();
+          _statement.release();
+        }
+      }
+    }, $completion);
+  }
+
+  @Override
+  public Flow<List<DateTransactionEntity>> getPaymentsReceivedOnDate(final long fileId,
+      final long startOfDay, final long endOfDay) {
+    final String _sql = "\n"
+            + "        SELECT \n"
+            + "            payments.id AS id, \n"
+            + "            persons.id AS personId, \n"
+            + "            persons.name AS personName, \n"
+            + "            payments.amount AS amount, \n"
+            + "            payments.date AS date\n"
+            + "        FROM payments\n"
+            + "        INNER JOIN loans ON payments.loanId = loans.id\n"
+            + "        INNER JOIN persons ON loans.personId = persons.id\n"
+            + "        WHERE persons.fileId = ? \n"
+            + "          AND payments.isDeleted = 0 \n"
+            + "          AND loans.isDeleted = 0\n"
+            + "          AND payments.date BETWEEN ? AND ?\n"
+            + "    ";
+    final RoomSQLiteQuery _statement = RoomSQLiteQuery.acquire(_sql, 3);
+    int _argIndex = 1;
+    _statement.bindLong(_argIndex, fileId);
+    _argIndex = 2;
+    _statement.bindLong(_argIndex, startOfDay);
+    _argIndex = 3;
+    _statement.bindLong(_argIndex, endOfDay);
+    return CoroutinesRoom.createFlow(__db, false, new String[] {"payments", "loans",
+        "persons"}, new Callable<List<DateTransactionEntity>>() {
+      @Override
+      @NonNull
+      public List<DateTransactionEntity> call() throws Exception {
+        final Cursor _cursor = DBUtil.query(__db, _statement, false, null);
+        try {
+          final int _cursorIndexOfId = 0;
+          final int _cursorIndexOfPersonId = 1;
+          final int _cursorIndexOfPersonName = 2;
+          final int _cursorIndexOfAmount = 3;
+          final int _cursorIndexOfDate = 4;
+          final List<DateTransactionEntity> _result = new ArrayList<DateTransactionEntity>(_cursor.getCount());
+          while (_cursor.moveToNext()) {
+            final DateTransactionEntity _item;
+            final long _tmpId;
+            _tmpId = _cursor.getLong(_cursorIndexOfId);
+            final long _tmpPersonId;
+            _tmpPersonId = _cursor.getLong(_cursorIndexOfPersonId);
+            final String _tmpPersonName;
+            _tmpPersonName = _cursor.getString(_cursorIndexOfPersonName);
+            final double _tmpAmount;
+            _tmpAmount = _cursor.getDouble(_cursorIndexOfAmount);
+            final long _tmpDate;
+            _tmpDate = _cursor.getLong(_cursorIndexOfDate);
+            _item = new DateTransactionEntity(_tmpId,_tmpPersonId,_tmpPersonName,_tmpAmount,_tmpDate);
             _result.add(_item);
           }
           return _result;

@@ -1,11 +1,19 @@
 package com.moneymate.lite.ui.screens
 
+import android.app.Activity
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -16,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.moneymate.lite.data.entity.Person
@@ -44,6 +53,54 @@ fun AddEditPersonDialog(
     val isEditMode = existingPerson != null
     val title = if (isEditMode) "Edit Customer" else "Add Customer"
 
+    val context = LocalContext.current
+    val contactPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val data = result.data?.data
+            if (data != null) {
+                try {
+                    val cursor = context.contentResolver.query(
+                        data,
+                        arrayOf(
+                            android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER,
+                            android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME
+                        ),
+                        null,
+                        null,
+                        null
+                    )
+                    cursor?.use { c ->
+                        if (c.moveToFirst()) {
+                            val numberIndex = c.getColumnIndex(android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER)
+                            val nameIndex = c.getColumnIndex(android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                            
+                            if (numberIndex >= 0) {
+                                val rawNumber = c.getString(numberIndex) ?: ""
+                                val digitsOnly = rawNumber.filter { it.isDigit() }
+                                val last10 = if (digitsOnly.length >= 10) {
+                                    digitsOnly.takeLast(10)
+                                } else {
+                                    digitsOnly
+                                }
+                                mobileNumber = last10
+                                mobileError = false
+                            }
+                            
+                            if (name.isBlank() && nameIndex >= 0) {
+                                name = c.getString(nameIndex) ?: ""
+                                nameError = false
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
+
     fun validate(): Boolean {
         var valid = true
         if (name.isBlank()) {
@@ -58,7 +115,7 @@ fun AddEditPersonDialog(
         } else {
             mobileError = false
         }
-        if (!isEditMode && totalAmountText.isNotBlank()) {
+        if (!isEditMode) {
             val amount = totalAmountText.toDoubleOrNull()
             if (amount == null || amount <= 0) {
                 amountError = true
@@ -95,6 +152,20 @@ fun AddEditPersonDialog(
                     label = { Text("Mobile Number") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    trailingIcon = {
+                        IconButton(onClick = {
+                            val intent = Intent(
+                                Intent.ACTION_PICK,
+                                android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI
+                            )
+                            contactPickerLauncher.launch(intent)
+                        }) {
+                            Icon(
+                                imageVector = Icons.Default.Contacts,
+                                contentDescription = "Select Contact"
+                            )
+                        }
+                    },
                     isError = mobileError,
                     supportingText = if (mobileError) {
                         { Text("Must be 10 digits") }
@@ -122,14 +193,14 @@ fun AddEditPersonDialog(
                             totalAmountText = it
                             amountError = false
                         },
-                        label = { Text("Total Amount Given (₹)") },
+                        label = { Text("Total Amount Given (₹) *") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         isError = amountError,
                         supportingText = if (amountError) {
                             { Text("Amount must be greater than 0") }
                         } else {
-                            { Text("Optional. Creates a loan automatically.") }
+                            { Text("Required. Creates a loan automatically.") }
                         },
                         modifier = Modifier.fillMaxWidth()
                     )

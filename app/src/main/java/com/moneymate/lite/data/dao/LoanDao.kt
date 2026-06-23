@@ -85,4 +85,33 @@ interface LoanDao {
         ORDER BY balance DESC
     """)
     fun getAllActiveLoansAcrossFiles(): Flow<List<LoanWithBalanceAndFile>>
+
+    @Query("""
+        SELECT 
+            loans.id AS id, 
+            loans.personId AS personId, 
+            persons.name AS personName, 
+            loans.totalAmount AS amount, 
+            loans.dateGiven AS date
+        FROM loans
+        INNER JOIN persons ON loans.personId = persons.id
+        WHERE persons.fileId = :fileId 
+          AND loans.isDeleted = 0 
+          AND loans.dateGiven BETWEEN :startOfDay AND :endOfDay
+    """)
+    fun getLoansGivenOnDate(fileId: Long, startOfDay: Long, endOfDay: Long): Flow<List<DateTransactionEntity>>
+
+    @Query("UPDATE loans SET isCompleted = 0, completedAt = null WHERE id = :loanId")
+    suspend fun markIncomplete(loanId: Long)
+
+    @Query("UPDATE loans SET isDeleted = 1 WHERE id = :id")
+    suspend fun softDeleteLoan(id: Long)
 }
+
+data class DateTransactionEntity(
+    val id: Long,
+    val personId: Long,
+    val personName: String,
+    val amount: Double,
+    val date: Long
+)
