@@ -1,4 +1,5 @@
-com.moneymate.lite:xml/image_share_filepaths = 0x7f0f0000
+com.moneymate.lite:xml/image_share_filepaths = 0x7f0f0001
+com.moneymate.lite:xml/file_paths = 0x7f0f0000
 com.moneymate.lite:styleable/SignInButton = 0x7f0e0011
 com.moneymate.lite:styleable/Navigator = 0x7f0e0010
 com.moneymate.lite:styleable/NavInclude = 0x7f0e000f
