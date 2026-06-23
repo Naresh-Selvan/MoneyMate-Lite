@@ -46,6 +46,7 @@ import com.moneymate.lite.ui.theme.ThemeSelectionDialog
 import com.moneymate.lite.ui.viewmodel.SettingsViewModel
 import com.moneymate.lite.ui.viewmodel.UpdateViewModel
 import com.moneymate.lite.ui.viewmodel.AppUpdateInfo
+import com.moneymate.lite.ui.viewmodel.AuthViewModel
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -53,7 +54,8 @@ import kotlinx.coroutines.launch
 fun SettingsScreen(
     navController: NavController,
     settingsViewModel: SettingsViewModel = hiltViewModel(),
-    updateViewModel: UpdateViewModel = hiltViewModel()
+    updateViewModel: UpdateViewModel = hiltViewModel(),
+    authViewModel: AuthViewModel = hiltViewModel()
 ) {
     val isBackingUp by settingsViewModel.isBackingUp.collectAsState()
     val isRestoring by settingsViewModel.isRestoring.collectAsState()
@@ -65,6 +67,7 @@ fun SettingsScreen(
     val isDarkMode by themeManager.isDarkMode.collectAsState()
     var activeUpdateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
     val isCheckingUpdates by updateViewModel.isChecking.collectAsState()
+    val isOfflineMode by authViewModel.isOfflineMode.collectAsState()
 
     Scaffold(
         topBar = {
@@ -148,11 +151,19 @@ fun SettingsScreen(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = "Backup your data to the cloud. Restore data from a previous backup.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    if (isOfflineMode) {
+                        Text(
+                            text = "Cloud backup and restore are unavailable in offline mode. Please sign in to back up your data.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    } else {
+                        Text(
+                            text = "Backup your data to the cloud. Restore data from a previous backup.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
 
                     Button(
                         onClick = {
@@ -165,7 +176,7 @@ fun SettingsScreen(
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !isBackingUp && !isRestoring
+                        enabled = !isOfflineMode && !isBackingUp && !isRestoring
                     ) {
                         if (isBackingUp) {
                             CircularProgressIndicator(
@@ -180,7 +191,7 @@ fun SettingsScreen(
                     Button(
                         onClick = { showRestoreConfirm = true },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !isBackingUp && !isRestoring,
+                        enabled = !isOfflineMode && !isBackingUp && !isRestoring,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.secondary
                         )

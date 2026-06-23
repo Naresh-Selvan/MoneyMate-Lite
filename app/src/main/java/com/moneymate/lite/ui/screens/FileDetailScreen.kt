@@ -238,7 +238,7 @@ fun FileDetailScreen(
             onDismissRequest = { deletingPerson = null },
             title = { Text("Delete Customer") },
             text = {
-                Text("Are you sure you want to delete \"${person.name}\"? This action cannot be undone.")
+                Text("Are you sure you want to delete \"${person.name}\"? This will move them to Recently Deleted.")
             },
             confirmButton = {
                 TextButton(

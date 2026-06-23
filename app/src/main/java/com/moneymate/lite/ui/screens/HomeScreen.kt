@@ -166,9 +166,10 @@ fun HomeScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        if (newFileName.isNotBlank()) {
+                        val nameToSave = newFileName.trim()
+                        if (nameToSave.isNotBlank()) {
                             scope.launch {
-                                viewModel.addFile(newFileName.trim())
+                                viewModel.addFile(nameToSave)
                             }
                         }
                         showAddDialog = false
@@ -189,11 +190,17 @@ fun HomeScreen(
         )
     }
 
+    val isOfflineMode by authViewModel.isOfflineMode.collectAsState()
+
     if (showLogoutConfirm) {
+        val dialogTitle = if (isOfflineMode) "Exit Offline Mode" else "Sign Out"
+        val dialogText = if (isOfflineMode) "Exit offline mode and return to the login screen?" else "Are you sure you want to sign out?"
+        val confirmText = if (isOfflineMode) "Exit" else "Sign Out"
+
         AlertDialog(
             onDismissRequest = { showLogoutConfirm = false },
-            title = { Text("Sign Out") },
-            text = { Text("Are you sure you want to sign out?") },
+            title = { Text(dialogTitle) },
+            text = { Text(dialogText) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -204,7 +211,7 @@ fun HomeScreen(
                         }
                     }
                 ) {
-                    Text("Sign Out", color = Color(0xFFE53935))
+                    Text(confirmText, color = Color(0xFFE53935))
                 }
             },
             dismissButton = {
@@ -258,8 +265,9 @@ fun HomeScreen(
                 TextButton(
                     onClick = {
                         fileToRename?.let { file ->
-                            if (customRenameText.isNotBlank()) {
-                                scope.launch { viewModel.renameFile(file.id, customRenameText.trim()) }
+                            val newName = customRenameText.trim()
+                            if (newName.isNotBlank()) {
+                                scope.launch { viewModel.renameFile(file.id, newName) }
                             }
                         }
                         fileToRename = null

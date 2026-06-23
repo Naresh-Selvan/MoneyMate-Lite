@@ -42,6 +42,10 @@ fun NavGraph(navController: NavHostController) {
 
     var activeUpdateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
 
+    val startDestination = remember {
+        if (authViewModel.currentUser.value != null || authViewModel.isOfflineMode.value) "home" else "login"
+    }
+
     LaunchedEffect(Unit) {
         updateViewModel.checkForUpdates { info ->
             if (info != null) {
@@ -66,7 +70,7 @@ fun NavGraph(navController: NavHostController) {
     ) { paddingValues ->
         NavHost(
             navController = navController,
-            startDestination = "login",
+            startDestination = startDestination,
             modifier = Modifier.padding(paddingValues)
         ) {
             composable("login") {

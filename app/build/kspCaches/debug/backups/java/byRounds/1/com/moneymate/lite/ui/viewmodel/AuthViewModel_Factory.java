@@ -1,13 +1,15 @@
 package com.moneymate.lite.ui.viewmodel;
 
+import android.content.Context;
 import dagger.internal.DaggerGenerated;
 import dagger.internal.Factory;
 import dagger.internal.QualifierMetadata;
 import dagger.internal.ScopeMetadata;
 import javax.annotation.processing.Generated;
+import javax.inject.Provider;
 
 @ScopeMetadata
-@QualifierMetadata
+@QualifierMetadata("dagger.hilt.android.qualifiers.ApplicationContext")
 @DaggerGenerated
 @Generated(
     value = "dagger.internal.codegen.ComponentProcessor",
@@ -21,20 +23,22 @@ import javax.annotation.processing.Generated;
     "cast"
 })
 public final class AuthViewModel_Factory implements Factory<AuthViewModel> {
+  private final Provider<Context> contextProvider;
+
+  public AuthViewModel_Factory(Provider<Context> contextProvider) {
+    this.contextProvider = contextProvider;
+  }
+
   @Override
   public AuthViewModel get() {
-    return newInstance();
+    return newInstance(contextProvider.get());
   }
 
-  public static AuthViewModel_Factory create() {
-    return InstanceHolder.INSTANCE;
+  public static AuthViewModel_Factory create(Provider<Context> contextProvider) {
+    return new AuthViewModel_Factory(contextProvider);
   }
 
-  public static AuthViewModel newInstance() {
-    return new AuthViewModel();
-  }
-
-  private static final class InstanceHolder {
-    private static final AuthViewModel_Factory INSTANCE = new AuthViewModel_Factory();
+  public static AuthViewModel newInstance(Context context) {
+    return new AuthViewModel(context);
   }
 }
