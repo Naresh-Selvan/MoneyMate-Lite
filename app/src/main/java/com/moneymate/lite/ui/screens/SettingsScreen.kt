@@ -303,6 +303,7 @@ fun SettingsScreen(
     activeUpdateInfo?.let { updateInfo ->
         UpdateDialog(
             updateInfo = updateInfo,
+            updateViewModel = updateViewModel,
             onDismiss = { activeUpdateInfo = null }
         )
     }

@@ -1,10 +1,11 @@
 package com.moneymate.lite.ui.viewmodel
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.moneymate.lite.BuildConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -38,6 +39,12 @@ class UpdateViewModel @Inject constructor(
     private val _isChecking = MutableStateFlow(false)
     val isChecking: StateFlow<Boolean> = _isChecking.asStateFlow()
 
+    private val _isDownloading = MutableStateFlow(false)
+    val isDownloading: StateFlow<Boolean> = _isDownloading.asStateFlow()
+
+    private val _downloadStatus = MutableStateFlow("")
+    val downloadStatus: StateFlow<String> = _downloadStatus.asStateFlow()
+
     fun checkForUpdates(onComplete: (AppUpdateInfo?) -> Unit = {}) {
         viewModelScope.launch {
             _isChecking.value = true
@@ -56,7 +63,6 @@ class UpdateViewModel @Inject constructor(
     }
 
     private suspend fun fetchUpdateInfo(): AppUpdateInfo? = withContext(Dispatchers.IO) {
-        // Raw JSON from your repository's main branch to check updates
         val spec = "https://raw.githubusercontent.com/Naresh-Selvan/MoneyMate-Lite/master/version.json"
         var connection: HttpURLConnection? = null
         try {
@@ -91,6 +97,108 @@ class UpdateViewModel @Inject constructor(
             null
         } finally {
             connection?.disconnect()
+        }
+    }
+
+    fun downloadAndInstallUpdate(apkUrl: String) {
+        viewModelScope.launch {
+            _isDownloading.value = true
+            _downloadStatus.value = "Downloading update..."
+            val result = downloadApk(apkUrl)
+            _isDownloading.value = false
+            result.fold(
+                onSuccess = { apkFile ->
+                    _downloadStatus.value = "Installing..."
+                    if (canInstallPackages()) {
+                        installApk(apkFile)
+                    } else {
+                        _downloadStatus.value = "Settings permission required. Please enable 'Allow from this source'."
+                        launchUnknownSourcesSettings()
+                    }
+                },
+                onFailure = { e ->
+                    Log.e("UpdateViewModel", "Download failed", e)
+                    _downloadStatus.value = "Download failed: ${e.message}"
+                }
+            )
+        }
+    }
+
+    fun canInstallPackages(): Boolean {
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            context.packageManager.canRequestPackageInstalls()
+        } else {
+            true
+        }
+    }
+
+    fun launchUnknownSourcesSettings() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            try {
+                val intent = Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                Log.e("UpdateViewModel", "Failed to launch source settings", e)
+            }
+        }
+    }
+
+    private suspend fun downloadApk(spec: String): Result<java.io.File> = withContext(Dispatchers.IO) {
+        try {
+            val url = URL(spec)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.connectTimeout = 30000
+            connection.readTimeout = 30000
+            connection.connect()
+
+            if (connection.responseCode != HttpURLConnection.HTTP_OK) {
+                return@withContext Result.failure(Exception("HTTP error: ${connection.responseCode}"))
+            }
+
+            val file = java.io.File(context.externalCacheDir ?: context.cacheDir, "update.apk")
+            if (file.exists()) {
+                file.delete()
+            }
+
+            val inputStream = connection.inputStream
+            val outputStream = java.io.FileOutputStream(file)
+            val buffer = ByteArray(8192)
+            var bytesRead: Int
+            val totalLength = connection.contentLength
+            var downloadedLength = 0
+            
+            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                outputStream.write(buffer, 0, bytesRead)
+                downloadedLength += bytesRead
+                if (totalLength > 0) {
+                    val progressPercent = (downloadedLength * 100L / totalLength).toInt()
+                    _downloadStatus.value = "Downloading: $progressPercent%"
+                }
+            }
+            outputStream.flush()
+            outputStream.close()
+            inputStream.close()
+            Result.success(file)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private fun installApk(file: java.io.File) {
+        try {
+            val authority = "${context.packageName}.provider"
+            val apkUri: Uri = androidx.core.content.FileProvider.getUriForFile(context, authority, file)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(apkUri, "application/vnd.android.package-archive")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            Log.e("UpdateViewModel", "Failed to launch installer: ${e.message}", e)
+            _downloadStatus.value = "Failed to open installer. Try opening standard downloads folder."
         }
     }
 

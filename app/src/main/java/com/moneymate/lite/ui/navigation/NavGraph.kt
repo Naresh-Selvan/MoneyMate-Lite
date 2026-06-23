@@ -57,6 +57,7 @@ fun NavGraph(navController: NavHostController) {
     activeUpdateInfo?.let { updateInfo ->
         UpdateDialog(
             updateInfo = updateInfo,
+            updateViewModel = updateViewModel,
             onDismiss = { activeUpdateInfo = null }
         )
     }
