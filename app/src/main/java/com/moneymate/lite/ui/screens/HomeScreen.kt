@@ -71,6 +71,7 @@ fun HomeScreen(
     var fileToDelete by remember { mutableStateOf<LoanFile?>(null) }
     var fileToRename by remember { mutableStateOf<LoanFile?>(null) }
     var renameText by remember { mutableStateOf("") }
+    var newFileName by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
     Scaffold(
@@ -147,17 +148,16 @@ fun HomeScreen(
     }
 
     if (showAddDialog) {
-        var customName by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = {
                 showAddDialog = false
-                customName = ""
+                newFileName = ""
             },
             title = { Text("New File") },
             text = {
                 OutlinedTextField(
-                    value = customName,
-                    onValueChange = { customName = it },
+                    value = newFileName,
+                    onValueChange = { newFileName = it },
                     label = { Text("File name") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -166,13 +166,13 @@ fun HomeScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        if (customName.isNotBlank()) {
+                        if (newFileName.isNotBlank()) {
                             scope.launch {
-                                viewModel.addFile(customName.trim())
+                                viewModel.addFile(newFileName.trim())
                             }
                         }
                         showAddDialog = false
-                        customName = ""
+                        newFileName = ""
                     }
                 ) {
                     Text("Add")
@@ -181,7 +181,7 @@ fun HomeScreen(
             dismissButton = {
                 TextButton(onClick = {
                     showAddDialog = false
-                    customName = ""
+                    newFileName = ""
                 }) {
                     Text("Cancel")
                 }
