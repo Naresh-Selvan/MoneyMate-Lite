@@ -155,7 +155,7 @@ fun SettingsScreen(
                 ) {
                     if (isOfflineMode || !isUserLoggedIn) {
                         Text(
-                            text = "Cloud backup and restore are unavailable in offline mode. Please sign in to back up your data.",
+                            text = "Please sign in for this functions",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.error
                         )
@@ -271,6 +271,14 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
+                    if (isOfflineMode || !isUserLoggedIn) {
+                        Text(
+                            text = "Please sign in to update",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+
                     Button(
                         onClick = {
                             updateViewModel.checkForUpdates { info ->
@@ -284,7 +292,7 @@ fun SettingsScreen(
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !isCheckingUpdates
+                        enabled = isUserLoggedIn && !isOfflineMode && !isCheckingUpdates
                     ) {
                         if (isCheckingUpdates) {
                             CircularProgressIndicator(
