@@ -19,18 +19,35 @@ interface PaymentDao {
     @Query("SELECT COALESCE(SUM(amount), 0.0) FROM payments WHERE loanId = :loanId AND isDeleted = 0")
     suspend fun getTotalPaidForLoan(loanId: Long): Double
 
-    @Query("SELECT COALESCE(SUM(amount), 0.0) FROM payments WHERE date BETWEEN :todayStart AND :todayEnd AND isDeleted = 0")
+    @Query("""
+        SELECT COALESCE(SUM(payments.amount), 0.0) 
+        FROM payments 
+        INNER JOIN loans ON payments.loanId = loans.id
+        INNER JOIN persons ON loans.personId = persons.id
+        INNER JOIN loan_files ON persons.fileId = loan_files.id
+        WHERE payments.date BETWEEN :todayStart AND :todayEnd 
+          AND payments.isDeleted = 0 
+          AND loans.isDeleted = 0
+          AND persons.isDeleted = 0 
+          AND loan_files.isDeleted = 0
+    """)
     suspend fun getTodayCollectionTotal(todayStart: Long, todayEnd: Long): Double
 
     @Query("""
         SELECT COALESCE(SUM(loans.totalAmount - (SELECT COALESCE(SUM(amount), 0.0) FROM payments WHERE loanId = loans.id AND isDeleted = 0)), 0.0) 
         FROM loans 
+        INNER JOIN persons ON loans.personId = persons.id
+        INNER JOIN loan_files ON persons.fileId = loan_files.id
         WHERE loans.isCompleted = 0 AND loans.isDeleted = 0
+          AND persons.isDeleted = 0 AND loan_files.isDeleted = 0
     """)
     suspend fun getTotalOutstandingBalance(): Double
 
     @Query("UPDATE payments SET isDeleted = 1 WHERE id = :id")
     suspend fun softDelete(id: Long)
+
+    @Query("UPDATE payments SET isDeleted = 1 WHERE loanId = :loanId")
+    suspend fun softDeletePaymentsForLoan(loanId: Long)
 
     @Query("UPDATE payments SET isDeleted = 0 WHERE id = :id")
     suspend fun restorePayment(id: Long)
@@ -64,6 +81,7 @@ interface PaymentDao {
         WHERE persons.fileId = :fileId 
           AND payments.isDeleted = 0 
           AND loans.isDeleted = 0
+          AND persons.isDeleted = 0
           AND payments.date BETWEEN :startOfDay AND :endOfDay
     """)
     fun getPaymentsReceivedOnDate(fileId: Long, startOfDay: Long, endOfDay: Long): Flow<List<DateTransactionEntity>>

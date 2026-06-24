@@ -77,12 +77,36 @@ class LoanRepository @Inject constructor(
         paymentDao.getTotalOutstandingBalance()
     }
 
+    @Transaction
     suspend fun softDeletePayment(id: Long) = withContext(Dispatchers.IO) {
+        val payment = paymentDao.getPaymentById(id) ?: return@withContext
         paymentDao.softDelete(id)
+        val loanId = payment.loanId
+        val loan = loanDao.getLoanById(loanId)
+        if (loan != null) {
+            val totalPaid = paymentDao.getTotalPaidForLoan(loanId)
+            if (totalPaid < loan.totalAmount) {
+                if (loan.isCompleted) {
+                    loanDao.markIncomplete(loanId)
+                }
+            }
+        }
     }
 
+    @Transaction
     suspend fun restorePayment(id: Long) = withContext(Dispatchers.IO) {
+        val payment = paymentDao.getPaymentById(id) ?: return@withContext
         paymentDao.restorePayment(id)
+        val loanId = payment.loanId
+        val loan = loanDao.getLoanById(loanId)
+        if (loan != null) {
+            val totalPaid = paymentDao.getTotalPaidForLoan(loanId)
+            if (totalPaid >= loan.totalAmount) {
+                if (!loan.isCompleted) {
+                    loanDao.markCompleted(loanId, System.currentTimeMillis())
+                }
+            }
+        }
     }
 
     fun getDeletedPaymentsByFile(fileId: Long): Flow<List<com.moneymate.lite.data.dao.DeletedPaymentWithPerson>> =
@@ -181,7 +205,9 @@ class LoanRepository @Inject constructor(
         }
     }
 
+    @Transaction
     suspend fun softDeleteLoan(id: Long) = withContext(Dispatchers.IO) {
         loanDao.softDeleteLoan(id)
+        paymentDao.softDeletePaymentsForLoan(id)
     }
 }

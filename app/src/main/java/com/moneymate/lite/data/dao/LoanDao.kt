@@ -63,7 +63,7 @@ interface LoanDao {
             loans.dateGiven AS dateGiven
         FROM loans
         INNER JOIN persons ON loans.personId = persons.id
-        WHERE persons.fileId = :fileId AND loans.isCompleted = 0 AND loans.isDeleted = 0
+        WHERE persons.fileId = :fileId AND loans.isCompleted = 0 AND loans.isDeleted = 0 AND persons.isDeleted = 0
     """)
     fun getAllActiveLoansInFile(fileId: Long): Flow<List<LoanWithBalance>>
 
@@ -97,6 +97,7 @@ interface LoanDao {
         INNER JOIN persons ON loans.personId = persons.id
         WHERE persons.fileId = :fileId 
           AND loans.isDeleted = 0 
+          AND persons.isDeleted = 0
           AND loans.dateGiven BETWEEN :startOfDay AND :endOfDay
     """)
     fun getLoansGivenOnDate(fileId: Long, startOfDay: Long, endOfDay: Long): Flow<List<DateTransactionEntity>>
