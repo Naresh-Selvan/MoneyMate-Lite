@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 7,
-  "latestVersionName": "1.0.7",
+  "latestVersionCode": 8,
+  "latestVersionName": "1.0.8",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Resilient database restore with full legacy MoneyMate app backup migration support. Customer list pagination, view and edit transactions by date, and contacts picker integration."
+  "changelog": "Fixed visual card shape overflow during swipe, resolved orphaned payments bug on loan soft-delete, and ensured transactional sync for payment actions and database metrics."
 }
