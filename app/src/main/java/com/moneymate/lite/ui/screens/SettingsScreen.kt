@@ -67,7 +67,9 @@ fun SettingsScreen(
     val isDarkMode by themeManager.isDarkMode.collectAsState()
     var activeUpdateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
     val isCheckingUpdates by updateViewModel.isChecking.collectAsState()
+    val currentUser by authViewModel.currentUser.collectAsState()
     val isOfflineMode by authViewModel.isOfflineMode.collectAsState()
+    val isUserLoggedIn = currentUser != null
 
     Scaffold(
         topBar = {
@@ -151,7 +153,7 @@ fun SettingsScreen(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    if (isOfflineMode) {
+                    if (isOfflineMode || !isUserLoggedIn) {
                         Text(
                             text = "Cloud backup and restore are unavailable in offline mode. Please sign in to back up your data.",
                             style = MaterialTheme.typography.bodyMedium,
@@ -176,7 +178,7 @@ fun SettingsScreen(
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !isOfflineMode && !isBackingUp && !isRestoring
+                        enabled = isUserLoggedIn && !isOfflineMode && !isBackingUp && !isRestoring
                     ) {
                         if (isBackingUp) {
                             CircularProgressIndicator(
@@ -191,7 +193,7 @@ fun SettingsScreen(
                     Button(
                         onClick = { showRestoreConfirm = true },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = !isOfflineMode && !isBackingUp && !isRestoring,
+                        enabled = isUserLoggedIn && !isOfflineMode && !isBackingUp && !isRestoring,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.secondary
                         )
