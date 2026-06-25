@@ -67,35 +67,57 @@ class RestoreHelper @Inject constructor() {
                     val filesSnapshot = db.collection(config.root).document(config.docId)
                         .collection(config.sub).get().await()
 
-                    if (filesSnapshot.isEmpty) continue
+                    if (filesSnapshot.isEmpty) {
+                        android.util.Log.d("RestoreHelper", "Collection is empty for config: ${config.root}/${config.docId}/${config.sub}")
+                        continue
+                    }
+
+                    android.util.Log.d("RestoreHelper", "Found ${filesSnapshot.documents.size} files for config: ${config.root}/${config.docId}/${config.sub}")
 
                     for (fileDoc in filesSnapshot.documents) {
                         val fileId = fileDoc.id.toLongId()
+                        val fileName = fileDoc.getString("name") ?: ""
+                        android.util.Log.d("RestoreHelper", "Restoring file: docId=${fileDoc.id}, mappedId=$fileId, name=$fileName")
+                        
                         val file = LoanFile(
                             id = fileId,
-                            name = fileDoc.getString("name") ?: "",
+                            name = fileName,
                             createdAt = if (safeGetLong(fileDoc, "createdAt") > 0) safeGetLong(fileDoc, "createdAt") else System.currentTimeMillis(),
-                            isDeleted = safeGetBoolean(fileDoc, "isDeleted")
+                            isDeleted = false // Force false to ensure it is visible in the main list
                         )
                         loanFileRepository.insert(file)
                         restoredFilesCount++
 
-                        val personsSnapshot = fileDoc.reference
-                            .collection("persons").get().await()
+                        // Try "persons" collection, fallback to "customers"
+                        var personsSnapshot = fileDoc.reference.collection("persons").get().await()
+                        if (personsSnapshot.isEmpty) {
+                            personsSnapshot = fileDoc.reference.collection("customers").get().await()
+                        }
+
+                        android.util.Log.d("RestoreHelper", "Found ${personsSnapshot.documents.size} customers for file: $fileName")
 
                         for (personDoc in personsSnapshot.documents) {
                             val personId = personDoc.id.toLongId()
                             val personFileIdStr = personDoc.getString("fileId") ?: fileDoc.id
+                            val personName = personDoc.getString("name") ?: ""
+                            val mobile = personDoc.getString("mobileNumber")
+                                ?: personDoc.getString("phone")
+                                ?: personDoc.getString("phoneNumber")
+                            val place = personDoc.getString("place")
+                                ?: personDoc.getString("address")
+
+                            android.util.Log.d("RestoreHelper", "Restoring customer: docId=${personDoc.id}, mappedId=$personId, name=$personName")
+
                             val person = Person(
                                 id = personId,
                                 fileId = personFileIdStr.toLongId(),
-                                name = personDoc.getString("name") ?: "",
-                                mobileNumber = personDoc.getString("mobileNumber"),
-                                place = personDoc.getString("place"),
+                                name = personName,
+                                mobileNumber = mobile,
+                                place = place,
                                 notes = personDoc.getString("notes"),
                                 sortOrder = safeGetLong(personDoc, "sortOrder").toInt(),
                                 createdAt = if (safeGetLong(personDoc, "createdAt") > 0) safeGetLong(personDoc, "createdAt") else System.currentTimeMillis(),
-                                isDeleted = safeGetBoolean(personDoc, "isDeleted")
+                                isDeleted = false // Force false to ensure visible
                             )
                             personRepository.insert(person)
 
@@ -104,41 +126,68 @@ class RestoreHelper @Inject constructor() {
 
                             if (!loansSnapshot.isEmpty) {
                                 // --- NEW SCHEMA ---
+                                android.util.Log.d("RestoreHelper", "Restoring loan (New Schema) for customer: $personName")
                                 for (loanDoc in loansSnapshot.documents) {
                                     val loanId = loanDoc.id.toLongId()
                                     val loanPersonIdStr = loanDoc.getString("personId") ?: personDoc.id
+                                    
+                                    val totalAmount = safeGetDouble(loanDoc, "totalAmount").takeIf { it > 0 }
+                                        ?: safeGetDouble(loanDoc, "amount")
+                                        ?: safeGetDouble(loanDoc, "amountGiven")
+                                        
+                                    val dateGiven = safeGetLong(loanDoc, "dateGiven").takeIf { it > 0 }
+                                        ?: safeGetLong(loanDoc, "date")
+                                        ?: safeGetLong(loanDoc, "createdAt")
+                                        
                                     val loan = Loan(
                                         id = loanId,
                                         personId = loanPersonIdStr.toLongId(),
-                                        totalAmount = safeGetDouble(loanDoc, "totalAmount"),
-                                        dateGiven = safeGetLong(loanDoc, "dateGiven"),
+                                        totalAmount = totalAmount,
+                                        dateGiven = if (dateGiven > 0) dateGiven else System.currentTimeMillis(),
                                         isCompleted = safeGetBoolean(loanDoc, "isCompleted"),
                                         completedAt = safeGetTimestampLong(loanDoc, "completedAt"),
                                         createdAt = if (safeGetLong(loanDoc, "createdAt") > 0) safeGetLong(loanDoc, "createdAt") else System.currentTimeMillis(),
-                                        isDeleted = safeGetBoolean(loanDoc, "isDeleted")
+                                        isDeleted = false // Force active
                                     )
                                     loanRepository.insertLoan(loan)
 
-                                    val paymentsSnapshot = loanDoc.reference
-                                        .collection("payments").get().await()
+                                    // Try "payments" collection, fallback to "transactions"
+                                    var paymentsSnapshot = loanDoc.reference.collection("payments").get().await()
+                                    if (paymentsSnapshot.isEmpty) {
+                                        paymentsSnapshot = loanDoc.reference.collection("transactions").get().await()
+                                    }
 
                                     for (paymentDoc in paymentsSnapshot.documents) {
                                         val paymentId = paymentDoc.id.toLongId()
+                                        val pAmount = safeGetDouble(paymentDoc, "amount").takeIf { it > 0 }
+                                            ?: safeGetDouble(paymentDoc, "value")
+                                            ?: safeGetDouble(paymentDoc, "amountPaid")
+                                            
+                                        val pDate = safeGetLong(paymentDoc, "date").takeIf { it > 0 }
+                                            ?: safeGetLong(paymentDoc, "timestamp")
+                                            ?: safeGetLong(paymentDoc, "createdAt")
+
                                         val payment = Payment(
                                             id = paymentId,
                                             loanId = loanId,
-                                            amount = safeGetDouble(paymentDoc, "amount"),
-                                            date = safeGetLong(paymentDoc, "date"),
+                                            amount = pAmount,
+                                            date = if (pDate > 0) pDate else System.currentTimeMillis(),
                                             createdAt = if (safeGetLong(paymentDoc, "createdAt") > 0) safeGetLong(paymentDoc, "createdAt") else System.currentTimeMillis(),
-                                            isDeleted = safeGetBoolean(paymentDoc, "isDeleted")
+                                            isDeleted = false
                                         )
                                         paymentRepository.insert(payment)
                                     }
                                 }
                             } else {
                                 // --- LEGACY SCHEMA ---
-                                val amountGiven = safeGetDouble(personDoc, "amountGiven")
-                                val dateGiven = safeGetLong(personDoc, "dateGiven")
+                                android.util.Log.d("RestoreHelper", "Restoring loan (Legacy Schema) for customer: $personName")
+                                val amountGiven = safeGetDouble(personDoc, "amountGiven").takeIf { it > 0 }
+                                    ?: safeGetDouble(personDoc, "totalAmount")
+                                    ?: safeGetDouble(personDoc, "amount")
+                                    
+                                val dateGiven = safeGetLong(personDoc, "dateGiven").takeIf { it > 0 }
+                                    ?: safeGetLong(personDoc, "createdAt")
+                                    
                                 val isCompleted = safeGetBoolean(personDoc, "isCompleted")
                                 val completedAt = safeGetTimestampLong(personDoc, "completedAt")
                                 
@@ -147,26 +196,37 @@ class RestoreHelper @Inject constructor() {
                                     id = virtualLoanId,
                                     personId = personId,
                                     totalAmount = amountGiven,
-                                    dateGiven = if (dateGiven > 0) dateGiven else (safeGetLong(personDoc, "createdAt").takeIf { it > 0 } ?: System.currentTimeMillis()),
+                                    dateGiven = if (dateGiven > 0) dateGiven else System.currentTimeMillis(),
                                     isCompleted = isCompleted,
                                     completedAt = completedAt,
-                                    createdAt = if (dateGiven > 0) dateGiven else (safeGetLong(personDoc, "createdAt").takeIf { it > 0 } ?: System.currentTimeMillis()),
-                                    isDeleted = safeGetBoolean(personDoc, "isDeleted")
+                                    createdAt = if (dateGiven > 0) dateGiven else System.currentTimeMillis(),
+                                    isDeleted = false
                                 )
                                 loanRepository.insertLoan(virtualLoan)
 
-                                val paymentsSnapshot = personDoc.reference
-                                    .collection("payments").get().await()
+                                // Try "payments" collection, fallback to "transactions"
+                                var paymentsSnapshot = personDoc.reference.collection("payments").get().await()
+                                if (paymentsSnapshot.isEmpty) {
+                                    paymentsSnapshot = personDoc.reference.collection("transactions").get().await()
+                                }
 
                                 for (paymentDoc in paymentsSnapshot.documents) {
                                     val paymentId = paymentDoc.id.toLongId()
+                                    val pAmount = safeGetDouble(paymentDoc, "amount").takeIf { it > 0 }
+                                        ?: safeGetDouble(paymentDoc, "value")
+                                        ?: safeGetDouble(paymentDoc, "amountPaid")
+                                        
+                                    val pDate = safeGetLong(paymentDoc, "date").takeIf { it > 0 }
+                                        ?: safeGetLong(paymentDoc, "timestamp")
+                                        ?: safeGetLong(paymentDoc, "createdAt")
+
                                     val payment = Payment(
                                         id = paymentId,
                                         loanId = virtualLoanId,
-                                        amount = safeGetDouble(paymentDoc, "amount"),
-                                        date = safeGetLong(paymentDoc, "date"),
+                                        amount = pAmount,
+                                        date = if (pDate > 0) pDate else System.currentTimeMillis(),
                                         createdAt = if (safeGetLong(paymentDoc, "createdAt") > 0) safeGetLong(paymentDoc, "createdAt") else System.currentTimeMillis(),
-                                        isDeleted = safeGetBoolean(paymentDoc, "isDeleted")
+                                        isDeleted = false
                                     )
                                     paymentRepository.insert(payment)
                                 }
@@ -174,7 +234,7 @@ class RestoreHelper @Inject constructor() {
                         }
                     }
                 } catch (e: Exception) {
-                    android.util.Log.w("RestoreHelper", "Failed querying path: ${config.root}/${config.docId}/${config.sub}: ${e.message}")
+                    android.util.Log.e("RestoreHelper", "Error restoring config path ${config.root}/${config.docId}/${config.sub}", e)
                 }
             }
 
