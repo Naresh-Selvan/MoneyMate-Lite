@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 9,
-  "latestVersionName": "1.0.9",
+  "latestVersionCode": 10,
+  "latestVersionName": "1.0.10",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Added cloud database restore diagnostics and granular subcollection error handling."
+  "changelog": "Optimized cloud database restore by suppressing speculative permission warnings and handling alternate user ID formats."
 }

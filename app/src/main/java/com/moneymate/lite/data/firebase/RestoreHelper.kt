@@ -3,6 +3,7 @@ package com.moneymate.lite.data.firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.moneymate.lite.data.entity.Loan
 import com.moneymate.lite.data.entity.LoanFile
 import com.moneymate.lite.data.entity.Payment
@@ -111,7 +112,11 @@ class RestoreHelper @Inject constructor() {
                             }
                             snap
                         } catch (e: Exception) {
-                            errors.add("Query customers under file $fileName failed: ${e.message}")
+                            if (isPermissionDenied(e)) {
+                                android.util.Log.w("RestoreHelper", "Permission denied querying customers under file $fileName")
+                            } else {
+                                errors.add("Query customers under file $fileName failed: ${e.message}")
+                            }
                             null
                         }
 
@@ -152,7 +157,11 @@ class RestoreHelper @Inject constructor() {
                                 val loansSnapshot = try {
                                     personDoc.reference.collection("loans").get().await()
                                 } catch (e: Exception) {
-                                    errors.add("Query loans for customer $personName failed: ${e.message}")
+                                    if (isPermissionDenied(e)) {
+                                        android.util.Log.w("RestoreHelper", "Permission denied querying loans for customer $personName")
+                                    } else {
+                                        errors.add("Query loans for customer $personName failed: ${e.message}")
+                                    }
                                     null
                                 }
 
@@ -197,7 +206,11 @@ class RestoreHelper @Inject constructor() {
                                             }
                                             snap
                                         } catch (e: Exception) {
-                                            errors.add("Query payments for loan $loanId failed: ${e.message}")
+                                            if (isPermissionDenied(e)) {
+                                                android.util.Log.w("RestoreHelper", "Permission denied querying payments for loan $loanId")
+                                            } else {
+                                                errors.add("Query payments for loan $loanId failed: ${e.message}")
+                                            }
                                             null
                                         }
 
@@ -269,7 +282,11 @@ class RestoreHelper @Inject constructor() {
                                         }
                                         snap
                                     } catch (e: Exception) {
-                                        errors.add("Query legacy payments for customer $personName failed: ${e.message}")
+                                        if (isPermissionDenied(e)) {
+                                            android.util.Log.w("RestoreHelper", "Permission denied querying legacy payments for customer $personName")
+                                        } else {
+                                            errors.add("Query legacy payments for customer $personName failed: ${e.message}")
+                                        }
                                         null
                                     }
 
@@ -305,8 +322,12 @@ class RestoreHelper @Inject constructor() {
                         }
                     }
                 } catch (e: Exception) {
-                    errors.add("Query path failed for $pathStr: ${e.message}")
-                    android.util.Log.e("RestoreHelper", "Error restoring config path ${config.root}/${config.docId}/${config.sub}", e)
+                    if (isPermissionDenied(e)) {
+                        android.util.Log.w("RestoreHelper", "Permission denied for config path ${config.root}/${config.docId}/${config.sub}")
+                    } else {
+                        errors.add("Query path failed for $pathStr: ${e.message}")
+                        android.util.Log.e("RestoreHelper", "Error restoring config path ${config.root}/${config.docId}/${config.sub}", e)
+                    }
                 }
             }
 
@@ -326,6 +347,13 @@ class RestoreHelper @Inject constructor() {
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    private fun isPermissionDenied(e: Exception): Boolean {
+        if (e is FirebaseFirestoreException && e.code == FirebaseFirestoreException.Code.PERMISSION_DENIED) {
+            return true
+        }
+        return e.message?.contains("PERMISSION_DENIED", ignoreCase = true) == true
     }
 
     private fun String.toLongId(): Long {
