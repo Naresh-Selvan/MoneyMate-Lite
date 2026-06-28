@@ -43,7 +43,7 @@ class RestoreHelper @Inject constructor() {
                 uidsToTry.add(altLower)
             }
 
-            val rootCollections = listOf("files", "users")
+            val rootCollections = listOf("files", "users", "com.moneymate.app", "com.moneymate.lite")
             val subCollections = listOf("loan_files", "files")
             
             var restoredFilesCount = 0
