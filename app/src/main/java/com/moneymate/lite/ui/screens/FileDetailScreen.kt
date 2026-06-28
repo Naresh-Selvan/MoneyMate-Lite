@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -179,7 +180,7 @@ fun FileDetailScreen(
     }
 
     val filteredPersons = remember(persons, searchQuery) {
-        if (searchQuery.isBlank()) {
+        val baseList = if (searchQuery.isBlank()) {
             persons
         } else {
             persons.filter {
@@ -188,6 +189,7 @@ fun FileDetailScreen(
                 (it.place?.contains(searchQuery, ignoreCase = true) == true)
             }
         }
+        baseList.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
     }
 
     val totalPages = remember(filteredPersons) {
@@ -1087,9 +1089,9 @@ private fun PersonCard(
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             if (value == SwipeToDismissBoxValue.EndToStart) {
-                onDelete()
+                onClick()
             }
-            false // snap back after revealing actions
+            false // snap back after triggering action
         }
     )
     val context = LocalContext.current
@@ -1105,43 +1107,22 @@ private fun PersonCard(
                     .background(
                         animateColorAsState(
                             targetValue = when (dismissState.targetValue) {
-                                SwipeToDismissBoxValue.EndToStart -> Color(0xFFD32F2F)
+                                SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.primaryContainer
                                 else -> Color.Transparent
                             },
                             label = "swipe_bg"
                         ).value
                     )
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 24.dp),
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(
-                    onClick = onEdit,
-                    colors = IconButtonDefaults.iconButtonColors(
-                        containerColor = Color(0xFF1E88E5)
-                    )
-                ) {
-                    Icon(
-                        Icons.Default.Edit,
-                        contentDescription = "Edit",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                IconButton(
-                    onClick = onDelete,
-                    colors = IconButtonDefaults.iconButtonColors(
-                        containerColor = Color(0xFFE53935)
-                    )
-                ) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = "Delete",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = "Open Details",
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(24.dp)
+                )
             }
         },
         enableDismissFromStartToEnd = false,

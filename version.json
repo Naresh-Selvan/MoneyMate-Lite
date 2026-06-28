@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 11,
-  "latestVersionName": "1.0.11",
+  "latestVersionCode": 12,
+  "latestVersionName": "1.0.12",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Added migration support for restoring backups from com.moneymate.app collection."
+  "changelog": "Added alphabetical sorting for files and customers. Swiping a customer now navigates to their details page instead of showing delete actions."
 }

@@ -66,6 +66,9 @@ fun HomeScreen(
     authViewModel: AuthViewModel = hiltViewModel()
 ) {
     val files by viewModel.files.collectAsState()
+    val sortedFiles = remember(files) {
+        files.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+    }
     var showAddDialog by remember { mutableStateOf(false) }
     var showLogoutConfirm by remember { mutableStateOf(false) }
     var fileToDelete by remember { mutableStateOf<LoanFile?>(null) }
@@ -104,7 +107,7 @@ fun HomeScreen(
             }
         }
     ) { paddingValues ->
-        if (files.isEmpty()) {
+        if (sortedFiles.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -128,7 +131,7 @@ fun HomeScreen(
                 contentPadding = PaddingValues(16.dp)
             ) {
                 items(
-                    items = files,
+                    items = sortedFiles,
                     key = { it.id }
                 ) { file ->
                     FileCard(
