@@ -35,7 +35,17 @@ jobs:
           LINT_PRINT_STACKTRACE: "true"
         run: ./gradlew assembleRelease -x lintVitalAnalyzeRelease
         
+      - name: Read version from version.json
+        id: read_version
+        run: |
+          VERSION=$(jq -r '.latestVersionName' version.json)
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          
       - name: Upload APK to release
         uses: softprops/action-gh-release@v2
         with:
           files: app/build/outputs/apk/release/app-release.apk
+          tag_name: ${{ github.event.release.tag_name || format('v{0}', steps.read_version.outputs.VERSION) }}
+          name: ${{ github.event.release.name || format('Release v{0}', steps.read_version.outputs.VERSION) }}
+          draft: false
+          prerelease: false
