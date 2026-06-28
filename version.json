@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 8,
-  "latestVersionName": "1.0.8",
+  "latestVersionCode": 9,
+  "latestVersionName": "1.0.9",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Fixed visual card shape overflow during swipe, resolved orphaned payments bug on loan soft-delete, and ensured transactional sync for payment actions and database metrics."
+  "changelog": "Added cloud database restore diagnostics and granular subcollection error handling."
 }
