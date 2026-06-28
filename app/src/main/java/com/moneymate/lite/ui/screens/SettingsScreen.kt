@@ -330,8 +330,11 @@ fun SettingsScreen(
                     showRestoreConfirm = false
                     settingsViewModel.restore { result ->
                         scope.launch {
-                            val msg = if (result.isSuccess) "Restore complete"
-                            else "Restore failed: ${result.exceptionOrNull()?.message}"
+                            val msg = if (result.isSuccess) {
+                                "Restore complete: ${result.getOrNull()}"
+                            } else {
+                                "Restore failed: ${result.exceptionOrNull()?.message}"
+                            }
                             snackbarHostState.showSnackbar(msg)
                         }
                     }

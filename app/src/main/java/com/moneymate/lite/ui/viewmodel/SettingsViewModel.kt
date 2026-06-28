@@ -46,7 +46,7 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun restore(onResult: (Result<Unit>) -> Unit) {
+    fun restore(onResult: (Result<String>) -> Unit) {
         if (_isBackingUp.value || _isRestoring.value) return
         _isRestoring.value = true
         viewModelScope.launch {
