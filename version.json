@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 12,
-  "latestVersionName": "1.0.12",
+  "latestVersionCode": 13,
+  "latestVersionName": "1.0.13",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Added alphabetical sorting for files and customers. Swiping a customer now navigates to their details page instead of showing delete actions."
+  "changelog": "Removed swipe-to-delete cards action entirely. Swiping horizontally anywhere on the customer page now navigates between pages."
 }

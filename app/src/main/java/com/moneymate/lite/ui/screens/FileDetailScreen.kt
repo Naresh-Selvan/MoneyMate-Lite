@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -381,92 +383,115 @@ fun FileDetailScreen(
                 }
             }
         } else {
-            if (persons.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "No customers yet. Tap + to add one.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(32.dp)
-                    )
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(16.dp)
-                ) {
-                    if (paginatedPersons.isEmpty() && searchQuery.isNotEmpty()) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(32.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "No results found for \"$searchQuery\"",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = TextAlign.Center
-                                )
-                            }
-                        }
-                    } else {
-                        itemsIndexed(
-                            items = paginatedPersons,
-                            key = { _, person -> person.id }
-                        ) { index, person ->
-                            val activeLoan = activeLoanMap[person.id]
-                            val globalIndex = (currentPage - 1) * pageSize + index
-
-                            PersonCard(
-                                index = globalIndex,
-                                person = person,
-                                activeLoan = activeLoan,
-                                onEdit = { editingPerson = person },
-                                onDelete = { deletingPerson = person },
-                                onClick = {
-                                    navController.navigate("person_detail/${person.id}")
+            var offsetX by remember { mutableStateOf(0f) }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .pointerInput(totalPages) {
+                        detectHorizontalDragGestures(
+                            onDragEnd = {
+                                if (offsetX < -100f) {
+                                    if (currentPage < totalPages) {
+                                        currentPage++
+                                    }
+                                } else if (offsetX > 100f) {
+                                    if (currentPage > 1) {
+                                        currentPage--
+                                    }
                                 }
-                            )
-                        }
-
-                        if (totalPages > 1) {
+                                offsetX = 0f
+                            },
+                            onHorizontalDrag = { change, dragAmount ->
+                                change.consume()
+                                offsetX += dragAmount
+                            }
+                        )
+                    }
+            ) {
+                if (persons.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No customers yet. Tap + to add one.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(32.dp)
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(16.dp)
+                    ) {
+                        if (paginatedPersons.isEmpty() && searchQuery.isNotEmpty()) {
                             item {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Row(
+                                Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(vertical = 8.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
+                                        .padding(32.dp),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    TextButton(
-                                        onClick = { if (currentPage > 1) currentPage-- },
-                                        enabled = currentPage > 1
-                                    ) {
-                                        Text("Previous")
-                                    }
                                     Text(
-                                        text = "Page $currentPage of $totalPages",
+                                        text = "No results found for \"$searchQuery\"",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center
                                     )
-                                    TextButton(
-                                        onClick = { if (currentPage < totalPages) currentPage++ },
-                                        enabled = currentPage < totalPages
+                                }
+                            }
+                        } else {
+                            itemsIndexed(
+                                items = paginatedPersons,
+                                key = { _, person -> person.id }
+                            ) { index, person ->
+                                val activeLoan = activeLoanMap[person.id]
+                                val globalIndex = (currentPage - 1) * pageSize + index
+
+                                PersonCard(
+                                    index = globalIndex,
+                                    person = person,
+                                    activeLoan = activeLoan,
+                                    onEdit = { editingPerson = person },
+                                    onDelete = { deletingPerson = person },
+                                    onClick = {
+                                        navController.navigate("person_detail/${person.id}")
+                                    }
+                                )
+                            }
+
+                            if (totalPages > 1) {
+                                item {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text("Next")
+                                        TextButton(
+                                            onClick = { if (currentPage > 1) currentPage-- },
+                                            enabled = currentPage > 1
+                                        ) {
+                                            Text("Previous")
+                                        }
+                                        Text(
+                                            text = "Page $currentPage of $totalPages",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        TextButton(
+                                            onClick = { if (currentPage < totalPages) currentPage++ },
+                                            enabled = currentPage < totalPages
+                                        ) {
+                                            Text("Next")
+                                        }
                                     }
                                 }
                             }
@@ -1086,156 +1111,116 @@ private fun PersonCard(
     onDelete: () -> Unit,
     onClick: () -> Unit
 ) {
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { value ->
-            if (value == SwipeToDismissBoxValue.EndToStart) {
-                onClick()
-            }
-            false // snap back after triggering action
-        }
-    )
     val context = LocalContext.current
     var showMenu by remember { mutableStateOf(false) }
 
-    SwipeToDismissBox(
-        state = dismissState,
-        backgroundContent = {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(CardDefaults.shape)
-                    .background(
-                        animateColorAsState(
-                            targetValue = when (dismissState.targetValue) {
-                                SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.primaryContainer
-                                else -> Color.Transparent
-                            },
-                            label = "swipe_bg"
-                        ).value
-                    )
-                    .padding(horizontal = 24.dp),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                    contentDescription = "Open Details",
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-        },
-        enableDismissFromStartToEnd = false,
-        enableDismissFromEndToStart = true
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Card(
-            onClick = onClick,
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
+            Icon(
+                Icons.Default.Person,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Default.Person,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .padding(end = 12.dp)
-                        .size(28.dp)
+                    .padding(end = 12.dp)
+                    .size(28.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "${index + 1}. ${person.name}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
-                Column(modifier = Modifier.weight(1f)) {
+                person.mobileNumber?.let { mobile ->
                     Text(
-                        text = "${index + 1}. ${person.name}",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        text = mobile,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    person.mobileNumber?.let { mobile ->
-                        Text(
-                            text = mobile,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    person.place?.let { place ->
-                        Text(
-                            text = place,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    if (activeLoan != null) {
-                        Text(
-                            text = "Balance: ₹${"%.0f".format(activeLoan.balance)}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFFE53935)
-                        )
-                        Text(
-                            text = "Total: ₹${"%.0f".format(activeLoan.totalAmount)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        Text(
-                            text = "No active loan",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
                 }
-                
-                Box {
-                    IconButton(onClick = { showMenu = true }) {
-                        Icon(
-                            Icons.Default.MoreVert,
-                            contentDescription = "Options",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Call") },
-                            onClick = {
-                                showMenu = false
-                                if (!person.mobileNumber.isNullOrBlank()) {
-                                    val intent = android.content.Intent(android.content.Intent.ACTION_DIAL).apply {
-                                        data = android.net.Uri.parse("tel:${person.mobileNumber}")
-                                    }
-                                    context.startActivity(intent)
+                person.place?.let { place ->
+                    Text(
+                        text = place,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                if (activeLoan != null) {
+                    Text(
+                        text = "Balance: ₹${"%.0f".format(activeLoan.balance)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFFE53935)
+                    )
+                    Text(
+                        text = "Total: ₹${"%.0f".format(activeLoan.totalAmount)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Text(
+                        text = "No active loan",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            
+            Box {
+                IconButton(onClick = { showMenu = true }) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = "Options",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Call") },
+                        onClick = {
+                            showMenu = false
+                            if (!person.mobileNumber.isNullOrBlank()) {
+                                val intent = android.content.Intent(android.content.Intent.ACTION_DIAL).apply {
+                                    data = android.net.Uri.parse("tel:${person.mobileNumber}")
                                 }
-                            },
-                            leadingIcon = { Icon(Icons.Default.Call, contentDescription = null) },
-                            enabled = !person.mobileNumber.isNullOrBlank()
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Edit") },
-                            onClick = {
-                                showMenu = false
-                                onEdit()
-                            },
-                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Delete") },
-                            onClick = {
-                                showMenu = false
-                                onDelete()
-                            },
-                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
-                        )
-                    }
+                                context.startActivity(intent)
+                            }
+                        },
+                        leadingIcon = { Icon(Icons.Default.Call, contentDescription = null) },
+                        enabled = !person.mobileNumber.isNullOrBlank()
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Edit") },
+                        onClick = {
+                            showMenu = false
+                            onEdit()
+                        },
+                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Delete") },
+                        onClick = {
+                            showMenu = false
+                            onDelete()
+                        },
+                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
+                    )
                 }
             }
         }
