@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 14,
-  "latestVersionName": "1.0.14",
+  "latestVersionCode": 15,
+  "latestVersionName": "1.0.15",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Added enhanced custom Date View with full customer lists, given/received transaction status per customer, and quick-add transaction shortcuts."
+  "changelog": "Fixed customer sorting to preserve original insertion/list order instead of sorting alphabetically."
 }

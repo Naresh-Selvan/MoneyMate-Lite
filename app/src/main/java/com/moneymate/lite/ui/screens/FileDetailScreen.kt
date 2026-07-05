@@ -192,7 +192,7 @@ fun FileDetailScreen(
                 (it.place?.contains(searchQuery, ignoreCase = true) == true)
             }
         }
-        baseList.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+        baseList.sortedBy { it.sortOrder }
     }
 
     val totalPages = remember(filteredPersons) {
