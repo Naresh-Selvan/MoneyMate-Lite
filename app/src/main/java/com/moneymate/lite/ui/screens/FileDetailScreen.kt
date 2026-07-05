@@ -110,13 +110,14 @@ fun FileDetailScreen(
     var isSearchActive by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
 
-    // Date filtering states
     var isDateFilterActive by remember { mutableStateOf(false) }
     var selectedDateMillis by remember { mutableStateOf(System.currentTimeMillis()) }
     var showDatePickerForFilter by remember { mutableStateOf(false) }
     var showAddTransactionDialog by remember { mutableStateOf(false) }
     var editingTransaction by remember { mutableStateOf<DateTransaction?>(null) }
     var deletingTransaction by remember { mutableStateOf<DateTransaction?>(null) }
+    var transactionPersonTarget by remember { mutableStateOf<Person?>(null) }
+
 
     // Pagination states
     var currentPage by remember { mutableStateOf(1) }
@@ -350,7 +351,14 @@ fun FileDetailScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(16.dp)
             ) {
-                if (transactions.isEmpty()) {
+                item {
+                    TransactionSummaryCard(
+                        totalGiven = totalGiven,
+                        totalReceived = totalReceived
+                    )
+                }
+
+                if (paginatedPersons.isEmpty()) {
                     item {
                         Box(
                             modifier = Modifier
@@ -359,7 +367,7 @@ fun FileDetailScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "No transactions on this date.",
+                                text = "No customers found.",
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center
@@ -367,18 +375,68 @@ fun FileDetailScreen(
                         }
                     }
                 } else {
-                    item {
-                        TransactionSummaryCard(
-                            totalGiven = totalGiven,
-                            totalReceived = totalReceived
+                    val personGivenTx = transactions.filter { it.type == DateTransactionType.GIVEN }.associateBy { it.personId }
+                    val personReceivedTx = transactions.filter { it.type == DateTransactionType.RECEIVED }.associateBy { it.personId }
+
+                    itemsIndexed(
+                        items = paginatedPersons,
+                        key = { _, person -> person.id }
+                    ) { index, person ->
+                        val globalIndex = (currentPage - 1) * pageSize + index
+                        val givenTx = personGivenTx[person.id]
+                        val receivedTx = personReceivedTx[person.id]
+
+                        DatePersonCard(
+                            index = globalIndex,
+                            person = person,
+                            givenTx = givenTx,
+                            receivedTx = receivedTx,
+                            onAddTransaction = {
+                                transactionPersonTarget = person
+                                showAddTransactionDialog = true
+                            },
+                            onEditTransaction = { tx ->
+                                editingTransaction = tx
+                            },
+                            onDeleteTransaction = { tx ->
+                                deletingTransaction = tx
+                            },
+                            onClick = {
+                                navController.navigate("person_detail/${person.id}")
+                            }
                         )
                     }
-                    items(transactions, key = { "${it.type}_${it.id}" }) { tx ->
-                        TransactionRow(
-                            transaction = tx,
-                            onEdit = { editingTransaction = tx },
-                            onDelete = { deletingTransaction = tx }
-                        )
+
+                    if (totalPages > 1) {
+                        item {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                TextButton(
+                                    onClick = { if (currentPage > 1) currentPage-- },
+                                    enabled = currentPage > 1
+                                ) {
+                                    Text("Previous")
+                                }
+                                Text(
+                                    text = "Page $currentPage of $totalPages",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                TextButton(
+                                    onClick = { if (currentPage < totalPages) currentPage++ },
+                                    enabled = currentPage < totalPages
+                                ) {
+                                    Text("Next")
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -605,8 +663,15 @@ fun FileDetailScreen(
             persons = persons,
             selectedDate = selectedDateMillis,
             loanViewModel = loanViewModel,
-            onDismiss = { showAddTransactionDialog = false },
-            onSaved = { showAddTransactionDialog = false }
+            preSelectedPerson = transactionPersonTarget,
+            onDismiss = { 
+                showAddTransactionDialog = false
+                transactionPersonTarget = null
+            },
+            onSaved = { 
+                showAddTransactionDialog = false
+                transactionPersonTarget = null
+            }
         )
     }
 
@@ -658,10 +723,11 @@ private fun AddTransactionDialog(
     persons: List<Person>,
     selectedDate: Long,
     loanViewModel: LoanViewModel,
+    preSelectedPerson: Person? = null,
     onDismiss: () -> Unit,
     onSaved: () -> Unit
 ) {
-    var selectedPerson by remember { mutableStateOf<Person?>(null) }
+    var selectedPerson by remember { mutableStateOf<Person?>(preSelectedPerson) }
     var showPersonSelector by remember { mutableStateOf(false) }
     var isGiven by remember { mutableStateOf(true) }
     var amountText by remember { mutableStateOf("") }
@@ -1222,6 +1288,133 @@ private fun PersonCard(
                         leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
                     )
                 }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DatePersonCard(
+    index: Int,
+    person: Person,
+    givenTx: DateTransaction?,
+    receivedTx: DateTransaction?,
+    onAddTransaction: () -> Unit,
+    onEditTransaction: (DateTransaction) -> Unit,
+    onDeleteTransaction: (DateTransaction) -> Unit,
+    onClick: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.Person,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .padding(end = 12.dp)
+                    .size(28.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "${index + 1}. ${person.name}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                // Given Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = if (givenTx != null) "Given: ₹${"%.0f".format(givenTx.amount)}" else "Given: nil",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (givenTx != null) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (givenTx != null) Color(0xFFD32F2F) else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (givenTx != null) {
+                        Row {
+                            IconButton(
+                                onClick = { onEditTransaction(givenTx) },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(Icons.Default.Edit, contentDescription = "Edit Given", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            IconButton(
+                                onClick = { onDeleteTransaction(givenTx) },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete Given", tint = Color(0xFFE53935), modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                // Received Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = if (receivedTx != null) "Received: ₹${"%.0f".format(receivedTx.amount)}" else "Received: nil",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (receivedTx != null) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (receivedTx != null) Color(0xFF388E3C) else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (receivedTx != null) {
+                        Row {
+                            IconButton(
+                                onClick = { onEditTransaction(receivedTx) },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(Icons.Default.Edit, contentDescription = "Edit Received", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            IconButton(
+                                onClick = { onDeleteTransaction(receivedTx) },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete Received", tint = Color(0xFFE53935), modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+                }
+            }
+            
+            IconButton(
+                onClick = onAddTransaction,
+                modifier = Modifier
+                    .padding(start = 8.dp)
+                    .background(MaterialTheme.colorScheme.primaryContainer, shape = MaterialTheme.shapes.small)
+                    .size(36.dp)
+            ) {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = "Add Transaction",
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
     }

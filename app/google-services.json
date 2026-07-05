@@ -1,78 +1,41 @@
 {
   "project_info": {
-    "project_number": "172139607552",
-    "project_id": "moneymate-125f7",
-    "storage_bucket": "moneymate-125f7.firebasestorage.app"
+    "project_number": "825789724764",
+    "project_id": "moneymate-lite-1904",
+    "storage_bucket": "moneymate-lite-1904.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:172139607552:android:90c6bb09bc6f9211c24ae5",
-        "android_client_info": {
-          "package_name": "com.moneymate.app"
-        }
-      },
-      "oauth_client": [
-        {
-          "client_id": "172139607552-8oabu47u5q4cd3ela2t5f8bl4kh86psf.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.moneymate.app",
-            "certificate_hash": "f7ab3c3eba30e63415285b037bec24c828965e90"
-          }
-        },
-        {
-          "client_id": "172139607552-vsocr50i0nhf9j485sp3t2jvfe4rtkrm.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
-      "api_key": [
-        {
-          "current_key": "AIzaSyDeAeOFaq1mF13HJhJn_XTrTxO-n4uqU5o"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "172139607552-vsocr50i0nhf9j485sp3t2jvfe4rtkrm.apps.googleusercontent.com",
-              "client_type": 3
-            }
-          ]
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:172139607552:android:5b0ea0c19ef15ea5c24ae5",
+        "mobilesdk_app_id": "1:825789724764:android:dee8b97394e24e605a4e99",
         "android_client_info": {
           "package_name": "com.moneymate.lite"
         }
       },
       "oauth_client": [
         {
-          "client_id": "172139607552-krv86o09uki9k55f14113a6up03detrt.apps.googleusercontent.com",
+          "client_id": "825789724764-v1upo1oj4tpeflfkqee9p8rc99i7eail.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.moneymate.lite",
-            "certificate_hash": "7155ddf82a08afffac56f136af52a6fa66085545"
+            "certificate_hash": "2fd61ceb28ece6394b63b020c0fc3451912af93b"
           }
         },
         {
-          "client_id": "172139607552-vsocr50i0nhf9j485sp3t2jvfe4rtkrm.apps.googleusercontent.com",
+          "client_id": "825789724764-5b2jshuu34mkfrvn6hddu8d8954klhd6.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyDeAeOFaq1mF13HJhJn_XTrTxO-n4uqU5o"
+          "current_key": "AIzaSyD7Tg3NNdDW2kFiEldxiFmw1PNRbMHIhLk"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "172139607552-vsocr50i0nhf9j485sp3t2jvfe4rtkrm.apps.googleusercontent.com",
+              "client_id": "825789724764-5b2jshuu34mkfrvn6hddu8d8954klhd6.apps.googleusercontent.com",
               "client_type": 3
             }
           ]

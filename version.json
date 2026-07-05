@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 13,
-  "latestVersionName": "1.0.13",
+  "latestVersionCode": 14,
+  "latestVersionName": "1.0.14",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Removed swipe-to-delete cards action entirely. Swiping horizontally anywhere on the customer page now navigates between pages."
+  "changelog": "Added enhanced custom Date View with full customer lists, given/received transaction status per customer, and quick-add transaction shortcuts."
 }
