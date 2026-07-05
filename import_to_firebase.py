@@ -163,7 +163,7 @@ def main():
             
             person_data = {
                 "id": person_id,
-                "fileId": book_id,
+                "fileId": str(book_id),
                 "name": cust["name"],
                 "mobileNumber": "",
                 "place": "",
