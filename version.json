@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 15,
-  "latestVersionName": "1.0.15",
+  "latestVersionCode": 16,
+  "latestVersionName": "1.0.16",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Fixed customer sorting to preserve original insertion/list order instead of sorting alphabetically."
+  "changelog": "Moved Add Customer button to the TopAppBar and added custom Serial Number positioning to insert/move customers at any position."
 }

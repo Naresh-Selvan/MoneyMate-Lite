@@ -34,16 +34,16 @@ class PersonViewModel @Inject constructor(
         }
     }
 
-    suspend fun addPerson(person: Person): Long {
-        return repository.insert(person)
+    suspend fun addPerson(person: Person, position: Int): Long {
+        return repository.insertAtPosition(person, position)
     }
 
-    suspend fun updatePerson(person: Person) {
-        repository.update(person)
+    suspend fun updatePerson(person: Person, oldSortOrder: Int, newSortOrder: Int) {
+        repository.updateWithPosition(person, oldSortOrder, newSortOrder)
     }
 
     suspend fun deletePerson(id: Long) {
-        repository.softDelete(id)
+        repository.deleteWithShift(id)
     }
 
     suspend fun getPersonById(id: Long): Person? = repository.getPersonById(id)

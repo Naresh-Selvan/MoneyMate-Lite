@@ -31,13 +31,15 @@ import com.moneymate.lite.data.entity.Person
 
 data class AddEditPersonResult(
     val person: Person,
-    val initialLoanAmount: Double = 0.0
+    val initialLoanAmount: Double = 0.0,
+    val targetPosition: Int
 )
 
 @Composable
 fun AddEditPersonDialog(
     fileId: Long,
     existingPerson: Person? = null,
+    currentPersonsCount: Int,
     onDismiss: () -> Unit,
     onSave: (AddEditPersonResult) -> Unit
 ) {
@@ -46,9 +48,19 @@ fun AddEditPersonDialog(
     var place by remember { mutableStateOf(existingPerson?.place ?: "") }
     var notes by remember { mutableStateOf(existingPerson?.notes ?: "") }
     var totalAmountText by remember { mutableStateOf("") }
+    var serialNumberText by remember {
+        mutableStateOf(
+            if (existingPerson != null) {
+                (existingPerson.sortOrder + 1).toString()
+            } else {
+                (currentPersonsCount + 1).toString()
+            }
+        )
+    }
     var nameError by remember { mutableStateOf(false) }
     var mobileError by remember { mutableStateOf(false) }
     var amountError by remember { mutableStateOf(false) }
+    var serialNumberError by remember { mutableStateOf(false) }
 
     val isEditMode = existingPerson != null
     val title = if (isEditMode) "Edit Customer" else "Add Customer"
@@ -124,6 +136,14 @@ fun AddEditPersonDialog(
                 amountError = false
             }
         }
+        val targetPos = serialNumberText.toIntOrNull()
+        val maxPos = if (isEditMode) currentPersonsCount else (currentPersonsCount + 1)
+        if (targetPos == null || targetPos < 1 || targetPos > maxPos) {
+            serialNumberError = true
+            valid = false
+        } else {
+            serialNumberError = false
+        }
         return valid
     }
 
@@ -141,6 +161,26 @@ fun AddEditPersonDialog(
                     supportingText = if (nameError) {
                         { Text("Name is required") }
                     } else null,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = serialNumberText,
+                    onValueChange = { serialNumberText = it; serialNumberError = false },
+                    label = { Text("Serial Number (Position) *") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    isError = serialNumberError,
+                    supportingText = {
+                        val maxPos = if (isEditMode) currentPersonsCount else (currentPersonsCount + 1)
+                        if (serialNumberError) {
+                            Text("Must be a number between 1 and $maxPos")
+                        } else {
+                            Text("Position in list (1 to $maxPos)")
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -221,6 +261,7 @@ fun AddEditPersonDialog(
             TextButton(onClick = {
                 if (validate()) {
                     val initialLoanAmount = totalAmountText.toDoubleOrNull() ?: 0.0
+                    val targetPos = serialNumberText.toIntOrNull() ?: (currentPersonsCount + 1)
                     val person = if (isEditMode) {
                         existingPerson.copy(
                             name = name.trim(),
@@ -237,7 +278,7 @@ fun AddEditPersonDialog(
                             notes = notes.ifBlank { null }
                         )
                     }
-                    onSave(AddEditPersonResult(person, initialLoanAmount))
+                    onSave(AddEditPersonResult(person, initialLoanAmount, targetPos))
                 }
             }) {
                 Text("Save")

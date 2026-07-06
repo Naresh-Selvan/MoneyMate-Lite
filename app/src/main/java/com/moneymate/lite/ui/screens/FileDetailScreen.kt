@@ -284,6 +284,15 @@ fun FileDetailScreen(
                 ),
                 actions = {
                     if (!isSearchActive) {
+                        if (!isDateFilterActive) {
+                            IconButton(onClick = { showAddDialog = true }) {
+                                Icon(
+                                    Icons.Default.Add,
+                                    contentDescription = "Add Customer",
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
                         IconButton(onClick = { showDatePickerForFilter = true }) {
                             Icon(
                                 Icons.Default.CalendarMonth,
@@ -324,23 +333,6 @@ fun FileDetailScreen(
                     }
                 }
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { 
-                    if (isDateFilterActive) {
-                        showAddTransactionDialog = true
-                    } else {
-                        showAddDialog = true
-                    }
-                },
-                containerColor = MaterialTheme.colorScheme.primary
-            ) {
-                Icon(
-                    Icons.Default.Add, 
-                    contentDescription = if (isDateFilterActive) "Add transaction" else "Add customer"
-                )
-            }
         }
     ) { paddingValues ->
         if (isDateFilterActive) {
@@ -564,12 +556,13 @@ fun FileDetailScreen(
     if (showAddDialog) {
         AddEditPersonDialog(
             fileId = fileId,
+            currentPersonsCount = persons.size,
             onDismiss = {
                 showAddDialog = false
             },
             onSave = { result ->
                 scope.launch {
-                    val personId = personViewModel.addPerson(result.person)
+                    val personId = personViewModel.addPerson(result.person, result.targetPosition)
                     // Auto-create a loan if initial amount was provided
                     if (result.initialLoanAmount > 0 && personId > 0) {
                         loanViewModel.createLoan(
@@ -589,12 +582,13 @@ fun FileDetailScreen(
         AddEditPersonDialog(
             fileId = fileId,
             existingPerson = person,
+            currentPersonsCount = persons.size,
             onDismiss = {
                 editingPerson = null
             },
             onSave = { result ->
                 scope.launch {
-                    personViewModel.updatePerson(result.person)
+                    personViewModel.updatePerson(result.person, person.sortOrder, result.targetPosition - 1)
                 }
                 editingPerson = null
             }

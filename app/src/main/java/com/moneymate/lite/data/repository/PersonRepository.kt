@@ -18,12 +18,24 @@ class PersonRepository @Inject constructor(
         personDao.insert(person)
     }
 
+    suspend fun insertAtPosition(person: Person, position: Int): Long = withContext(Dispatchers.IO) {
+        personDao.insertPersonAtPosition(person, position)
+    }
+
     suspend fun update(person: Person) = withContext(Dispatchers.IO) {
         personDao.update(person)
     }
 
+    suspend fun updateWithPosition(person: Person, oldSortOrder: Int, newSortOrder: Int) = withContext(Dispatchers.IO) {
+        personDao.updatePersonWithPosition(person, oldSortOrder, newSortOrder)
+    }
+
     suspend fun softDelete(id: Long) = withContext(Dispatchers.IO) {
         personDao.softDelete(id)
+    }
+
+    suspend fun deleteWithShift(id: Long) = withContext(Dispatchers.IO) {
+        personDao.deletePersonWithShift(id)
     }
 
     fun getDeletedPersons(): Flow<List<Person>> = personDao.getDeletedPersons()
