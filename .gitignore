@@ -1,0 +1,32 @@
+# Gradle files
+.gradle/
+build/
+app/build/
+
+# Local configuration
+local.properties
+
+# Secrets and credentials
+firebase-key.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# Temporary and backup Excel files
+*.xlsx
+names_input.txt
+test_file.txt
+bg_test.txt
+
+# IDE files
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/gradle.xml
+.idea/assetWizardSettings.xml
+.idea/dictionaries/
+.idea/libraries/
+.idea/caches/
+*.iml
