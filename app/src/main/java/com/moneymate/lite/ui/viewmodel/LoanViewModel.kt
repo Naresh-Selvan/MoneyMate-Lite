@@ -121,6 +121,12 @@ class LoanViewModel @Inject constructor(
         return repository.getPaymentsReceivedOnDate(fileId, startOfDay, endOfDay)
     }
 
+    fun getBalancesUpToDate(fileId: Long, upToDate: Long): Flow<List<com.moneymate.lite.data.dao.PersonBalanceUpToDate>> {
+        return repository.getBalancesUpToDate(fileId, upToDate)
+    }
+
+
+
     suspend fun addGivenTransaction(personId: Long, amount: Double, date: Long): Result<Unit> {
         return try {
             repository.addGivenTransaction(personId, amount, date)

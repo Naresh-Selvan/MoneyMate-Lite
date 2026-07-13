@@ -102,6 +102,29 @@ interface LoanDao {
     """)
     fun getLoansGivenOnDate(fileId: Long, startOfDay: Long, endOfDay: Long): Flow<List<DateTransactionEntity>>
 
+    @Query("""
+        SELECT 
+            persons.id AS personId,
+            (
+                SELECT COALESCE(SUM(loans.totalAmount), 0.0) 
+                FROM loans 
+                WHERE loans.personId = persons.id 
+                  AND loans.isDeleted = 0 
+                  AND loans.dateGiven <= :upToDate
+            ) - (
+                SELECT COALESCE(SUM(payments.amount), 0.0) 
+                FROM payments 
+                INNER JOIN loans ON payments.loanId = loans.id
+                WHERE loans.personId = persons.id 
+                  AND payments.isDeleted = 0 
+                  AND loans.isDeleted = 0
+                  AND payments.date <= :upToDate
+            ) AS balance
+        FROM persons
+        WHERE persons.fileId = :fileId AND persons.isDeleted = 0
+    """)
+    fun getBalancesUpToDate(fileId: Long, upToDate: Long): Flow<List<PersonBalanceUpToDate>>
+
     @Query("UPDATE loans SET isCompleted = 0, completedAt = null WHERE id = :loanId")
     suspend fun markIncomplete(loanId: Long)
 
@@ -116,3 +139,9 @@ data class DateTransactionEntity(
     val amount: Double,
     val date: Long
 )
+
+data class PersonBalanceUpToDate(
+    val personId: Long,
+    val balance: Double
+)
+

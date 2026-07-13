@@ -182,6 +182,20 @@ fun FileDetailScreen(
         transactions.filter { it.type == DateTransactionType.RECEIVED }.sumOf { it.amount }
     }
 
+    val balancesUpToDateFlow = remember(fileId, dateRange) {
+        loanViewModel.getBalancesUpToDate(fileId, dateRange.second)
+    }
+    val balancesUpToDate by balancesUpToDateFlow.collectAsState(initial = emptyList())
+
+    val balancesUpToDateMap = remember(balancesUpToDate) {
+        balancesUpToDate.associateBy { it.personId }
+    }
+
+    val totalBalance = remember(balancesUpToDate) {
+        balancesUpToDate.sumOf { it.balance }
+    }
+
+
     val filteredPersons = remember(persons, searchQuery) {
         val baseList = if (searchQuery.isBlank()) {
             persons
@@ -346,9 +360,11 @@ fun FileDetailScreen(
                 item {
                     TransactionSummaryCard(
                         totalGiven = totalGiven,
-                        totalReceived = totalReceived
+                        totalReceived = totalReceived,
+                        totalBalance = totalBalance
                     )
                 }
+
 
                 if (paginatedPersons.isEmpty()) {
                     item {
@@ -377,12 +393,14 @@ fun FileDetailScreen(
                         val globalIndex = (currentPage - 1) * pageSize + index
                         val givenTx = personGivenTx[person.id]
                         val receivedTx = personReceivedTx[person.id]
+                        val personBalance = balancesUpToDateMap[person.id]?.balance ?: 0.0
 
                         DatePersonCard(
                             index = globalIndex,
                             person = person,
                             givenTx = givenTx,
                             receivedTx = receivedTx,
+                            balance = personBalance,
                             onAddTransaction = {
                                 transactionPersonTarget = person
                                 showAddTransactionDialog = true
@@ -397,6 +415,7 @@ fun FileDetailScreen(
                                 navController.navigate("person_detail/${person.id}")
                             }
                         )
+
                     }
 
                     if (totalPages > 1) {
@@ -1028,7 +1047,8 @@ private fun EditTransactionDialog(
 @Composable
 private fun TransactionSummaryCard(
     totalGiven: Double,
-    totalReceived: Double
+    totalReceived: Double,
+    totalBalance: Double
 ) {
     Card(
         modifier = Modifier
@@ -1071,9 +1091,23 @@ private fun TransactionSummaryCard(
                     color = Color(0xFF388E3C)
                 )
             }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "Total Balance",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                Text(
+                    text = "₹${"%.0f".format(totalBalance)}",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
         }
     }
 }
+
 
 @Composable
 private fun TransactionRow(
@@ -1294,6 +1328,7 @@ private fun DatePersonCard(
     person: Person,
     givenTx: DateTransaction?,
     receivedTx: DateTransaction?,
+    balance: Double,
     onAddTransaction: () -> Unit,
     onEditTransaction: (DateTransaction) -> Unit,
     onDeleteTransaction: (DateTransaction) -> Unit,
@@ -1394,7 +1429,24 @@ private fun DatePersonCard(
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                // Balance Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Balance: ₹${"%.0f".format(balance)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (balance > 0) Color(0xFFE53935) else if (balance < 0) Color(0xFF388E3C) else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
+
             
             IconButton(
                 onClick = onAddTransaction,

@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 16,
-  "latestVersionName": "1.0.16",
+  "latestVersionCode": 17,
+  "latestVersionName": "1.0.17",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Moved Add Customer button to the TopAppBar and added custom Serial Number positioning to insert/move customers at any position."
+  "changelog": "Added cumulative total balance and individual customer balances up to selected date in Date View."
 }

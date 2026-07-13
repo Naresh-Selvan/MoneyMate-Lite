@@ -118,6 +118,10 @@ class LoanRepository @Inject constructor(
     fun getPaymentsReceivedOnDate(fileId: Long, startOfDay: Long, endOfDay: Long): Flow<List<DateTransactionEntity>> =
         paymentDao.getPaymentsReceivedOnDate(fileId, startOfDay, endOfDay)
 
+    fun getBalancesUpToDate(fileId: Long, upToDate: Long): Flow<List<com.moneymate.lite.data.dao.PersonBalanceUpToDate>> =
+        loanDao.getBalancesUpToDate(fileId, upToDate)
+
+
     @Transaction
     suspend fun addGivenTransaction(personId: Long, amount: Double, date: Long) = withContext(Dispatchers.IO) {
         val activeLoan = loanDao.getActiveLoanByPerson(personId)
