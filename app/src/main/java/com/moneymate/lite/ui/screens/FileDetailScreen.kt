@@ -50,6 +50,8 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.activity.compose.BackHandler
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -128,6 +130,16 @@ fun FileDetailScreen(
     val dateString = remember(selectedDateMillis) {
         dateFormat.format(Date(selectedDateMillis))
     }
+
+    BackHandler(enabled = isSearchActive || isDateFilterActive) {
+        if (isSearchActive) {
+            isSearchActive = false
+            searchQuery = ""
+        } else if (isDateFilterActive) {
+            isDateFilterActive = false
+        }
+    }
+
 
     // Reactive file name — stable from first frame, no flicker
     val decodedName = remember(name) { java.net.URLDecoder.decode(name, "UTF-8") }

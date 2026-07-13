@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 17,
-  "latestVersionName": "1.0.17",
+  "latestVersionCode": 18,
+  "latestVersionName": "1.0.18",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Added cumulative total balance and individual customer balances up to selected date in Date View."
+  "changelog": "Intercept system back press in FileDetailScreen to clear active search or date filter instead of closing the screen."
 }
