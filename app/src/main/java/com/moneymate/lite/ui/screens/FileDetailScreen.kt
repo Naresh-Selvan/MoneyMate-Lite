@@ -610,9 +610,11 @@ fun FileDetailScreen(
 
     // Edit person dialog
     editingPerson?.let { person ->
+        val activeLoan = activeLoanMap[person.id]
         AddEditPersonDialog(
             fileId = fileId,
             existingPerson = person,
+            existingLoanAmount = activeLoan?.totalAmount,
             currentPersonsCount = persons.size,
             onDismiss = {
                 editingPerson = null
@@ -620,6 +622,9 @@ fun FileDetailScreen(
             onSave = { result ->
                 scope.launch {
                     personViewModel.updatePerson(result.person, person.sortOrder, result.targetPosition - 1)
+                    if (activeLoan != null && result.initialLoanAmount > 0 && result.initialLoanAmount != activeLoan.totalAmount) {
+                        loanViewModel.updateLoanAmount(activeLoan.loanId, result.initialLoanAmount)
+                    }
                 }
                 editingPerson = null
             }

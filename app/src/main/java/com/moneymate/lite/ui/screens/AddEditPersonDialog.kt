@@ -39,6 +39,7 @@ data class AddEditPersonResult(
 fun AddEditPersonDialog(
     fileId: Long,
     existingPerson: Person? = null,
+    existingLoanAmount: Double? = null,
     currentPersonsCount: Int,
     onDismiss: () -> Unit,
     onSave: (AddEditPersonResult) -> Unit
@@ -47,7 +48,19 @@ fun AddEditPersonDialog(
     var mobileNumber by remember { mutableStateOf(existingPerson?.mobileNumber ?: "") }
     var place by remember { mutableStateOf(existingPerson?.place ?: "") }
     var notes by remember { mutableStateOf(existingPerson?.notes ?: "") }
-    var totalAmountText by remember { mutableStateOf("") }
+    var totalAmountText by remember {
+        mutableStateOf(
+            if (existingLoanAmount != null) {
+                if (existingLoanAmount % 1 == 0.0) {
+                    existingLoanAmount.toLong().toString()
+                } else {
+                    existingLoanAmount.toString()
+                }
+            } else {
+                ""
+            }
+        )
+    }
     var serialNumberText by remember {
         mutableStateOf(
             if (existingPerson != null) {
@@ -127,7 +140,7 @@ fun AddEditPersonDialog(
         } else {
             mobileError = false
         }
-        if (!isEditMode) {
+        if (!isEditMode || existingLoanAmount != null) {
             val amount = totalAmountText.toDoubleOrNull()
             if (amount == null || amount <= 0) {
                 amountError = true
@@ -225,8 +238,8 @@ fun AddEditPersonDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Total amount field for new customers only
-                if (!isEditMode) {
+                // Total amount field for new customers, or existing customers with an active loan
+                if (!isEditMode || existingLoanAmount != null) {
                     OutlinedTextField(
                         value = totalAmountText,
                         onValueChange = {
@@ -240,7 +253,11 @@ fun AddEditPersonDialog(
                         supportingText = if (amountError) {
                             { Text("Amount must be greater than 0") }
                         } else {
-                            { Text("Required. Creates a loan automatically.") }
+                            if (isEditMode) {
+                                { Text("Required. Updates the active loan amount.") }
+                            } else {
+                                { Text("Required. Creates a loan automatically.") }
+                            }
                         },
                         modifier = Modifier.fillMaxWidth()
                     )

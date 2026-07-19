@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 18,
-  "latestVersionName": "1.0.18",
+  "latestVersionCode": 19,
+  "latestVersionName": "1.0.19",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Intercept system back press in FileDetailScreen to clear active search or date filter instead of closing the screen."
+  "changelog": "Allow editing the active loan's total/given amount directly from the Edit Customer dialog."
 }
