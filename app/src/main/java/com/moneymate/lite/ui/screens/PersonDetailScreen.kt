@@ -18,9 +18,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Payment
+import com.moneymate.lite.ui.screens.EditPaymentDialog
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -85,6 +87,7 @@ fun PersonDetailScreen(
     var showRecordPaymentDialog by remember { mutableStateOf(false) }
     var expandedLoanId by remember { mutableStateOf<Long?>(null) }
     var paymentToDelete by remember { mutableStateOf<Payment?>(null) }
+    var editingPayment by remember { mutableStateOf<Payment?>(null) }
 
     // Fetch person data once
     LaunchedEffect(personId) {
@@ -195,6 +198,7 @@ fun PersonDetailScreen(
                         onToggle = {
                             expandedLoanId = if (expandedLoanId == loan.id) null else loan.id
                         },
+                        onEditPayment = { editingPayment = it },
                         onDeletePayment = { paymentToDelete = it }
                     )
                 }
@@ -231,6 +235,15 @@ fun PersonDetailScreen(
                     snackbarHostState.showSnackbar(msg)
                 }
             }
+        )
+    }
+
+    if (editingPayment != null) {
+        EditPaymentDialog(
+            payment = editingPayment!!,
+            loanViewModel = loanViewModel,
+            onDismiss = { editingPayment = null },
+            onSaved = { editingPayment = null }
         )
     }
 
@@ -390,6 +403,7 @@ private fun LoanHistoryItem(
     isExpanded: Boolean,
     dateFormat: SimpleDateFormat,
     onToggle: () -> Unit,
+    onEditPayment: (Payment) -> Unit,
     onDeletePayment: (Payment) -> Unit,
     loanViewModel: LoanViewModel = hiltViewModel()
 ) {
@@ -488,6 +502,18 @@ private fun LoanHistoryItem(
                                         fontWeight = FontWeight.Medium
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
+                                    IconButton(
+                                        onClick = { onEditPayment(payment) },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Edit,
+                                            contentDescription = "Edit payment",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(4.dp))
                                     IconButton(
                                         onClick = { onDeletePayment(payment) },
                                         modifier = Modifier.size(24.dp)

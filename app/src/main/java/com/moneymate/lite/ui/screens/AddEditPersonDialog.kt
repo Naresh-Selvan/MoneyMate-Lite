@@ -27,19 +27,29 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.ExperimentalMaterial3Api
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import com.moneymate.lite.data.entity.Person
 
 data class AddEditPersonResult(
     val person: Person,
     val initialLoanAmount: Double = 0.0,
+    val initialLoanDate: Long = System.currentTimeMillis(),
     val targetPosition: Int
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddEditPersonDialog(
     fileId: Long,
     existingPerson: Person? = null,
     existingLoanAmount: Double? = null,
+    existingLoanDate: Long? = null,
     currentPersonsCount: Int,
     onDismiss: () -> Unit,
     onSave: (AddEditPersonResult) -> Unit
@@ -48,6 +58,9 @@ fun AddEditPersonDialog(
     var mobileNumber by remember { mutableStateOf(existingPerson?.mobileNumber ?: "") }
     var place by remember { mutableStateOf(existingPerson?.place ?: "") }
     var notes by remember { mutableStateOf(existingPerson?.notes ?: "") }
+    var loanDateMillis by remember { mutableStateOf(existingLoanDate ?: System.currentTimeMillis()) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    val dateFormat = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
     var totalAmountText by remember {
         mutableStateOf(
             if (existingLoanAmount != null) {
@@ -160,6 +173,30 @@ fun AddEditPersonDialog(
         return valid
     }
 
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = loanDateMillis
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { loanDateMillis = it }
+                    showDatePicker = false
+                }) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text("Cancel")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
@@ -262,6 +299,22 @@ fun AddEditPersonDialog(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = dateFormat.format(Date(loanDateMillis)),
+                        onValueChange = {},
+                        label = { Text("Date Given") },
+                        readOnly = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    TextButton(onClick = { showDatePicker = true }) {
+                        Text("Change Date")
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
 
                 OutlinedTextField(
@@ -295,7 +348,7 @@ fun AddEditPersonDialog(
                             notes = notes.ifBlank { null }
                         )
                     }
-                    onSave(AddEditPersonResult(person, initialLoanAmount, targetPos))
+                    onSave(AddEditPersonResult(person, initialLoanAmount, loanDateMillis, targetPos))
                 }
             }) {
                 Text("Save")

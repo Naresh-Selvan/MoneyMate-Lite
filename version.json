@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 19,
-  "latestVersionName": "1.0.19",
+  "latestVersionCode": 20,
+  "latestVersionName": "1.0.20",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Allow editing the active loan's total/given amount directly from the Edit Customer dialog."
+  "changelog": "Allow editing date when adding/editing customer details and editing amount & date of recorded payments."
 }

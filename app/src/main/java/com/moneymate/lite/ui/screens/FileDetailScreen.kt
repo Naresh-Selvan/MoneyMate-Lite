@@ -599,7 +599,7 @@ fun FileDetailScreen(
                         loanViewModel.createLoan(
                             personId = personId,
                             totalAmount = result.initialLoanAmount,
-                            dateGiven = System.currentTimeMillis()
+                            dateGiven = result.initialLoanDate
                         )
                     }
                 }
@@ -615,6 +615,7 @@ fun FileDetailScreen(
             fileId = fileId,
             existingPerson = person,
             existingLoanAmount = activeLoan?.totalAmount,
+            existingLoanDate = activeLoan?.dateGiven,
             currentPersonsCount = persons.size,
             onDismiss = {
                 editingPerson = null
@@ -622,8 +623,10 @@ fun FileDetailScreen(
             onSave = { result ->
                 scope.launch {
                     personViewModel.updatePerson(result.person, person.sortOrder, result.targetPosition - 1)
-                    if (activeLoan != null && result.initialLoanAmount > 0 && result.initialLoanAmount != activeLoan.totalAmount) {
-                        loanViewModel.updateLoanAmount(activeLoan.loanId, result.initialLoanAmount)
+                    if (activeLoan != null && result.initialLoanAmount > 0) {
+                        if (result.initialLoanAmount != activeLoan.totalAmount || result.initialLoanDate != activeLoan.dateGiven) {
+                            loanViewModel.updateLoan(activeLoan.loanId, result.initialLoanAmount, result.initialLoanDate)
+                        }
                     }
                 }
                 editingPerson = null
@@ -973,8 +976,35 @@ private fun EditTransactionDialog(
 ) {
     var amountText by remember { mutableStateOf("%.0f".format(transaction.amount)) }
     var amountError by remember { mutableStateOf(false) }
+    var transactionDate by remember { mutableStateOf(transaction.date) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    val dateFormat = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = transactionDate
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { transactionDate = it }
+                    showDatePicker = false
+                }) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text("Cancel")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1020,6 +1050,22 @@ private fun EditTransactionDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = dateFormat.format(Date(transactionDate)),
+                    onValueChange = {},
+                    label = { Text("Date") },
+                    readOnly = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                TextButton(onClick = { showDatePicker = true }) {
+                    Text("Change Date")
+                }
+
                 errorMessage?.let {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
@@ -1040,9 +1086,9 @@ private fun EditTransactionDialog(
 
                 scope.launch {
                     val result = if (transaction.type == DateTransactionType.GIVEN) {
-                        loanViewModel.updateLoanAmount(transaction.id, amount)
+                        loanViewModel.updateLoan(transaction.id, amount, transactionDate)
                     } else {
-                        loanViewModel.updatePaymentAmount(transaction.id, amount)
+                        loanViewModel.updatePayment(transaction.id, amount, transactionDate)
                     }
                     result.fold(
                         onSuccess = { onSaved() },

@@ -188,9 +188,49 @@ class LoanRepository @Inject constructor(
     }
 
     @Transaction
+    suspend fun updateLoan(loanId: Long, newAmount: Double, newDate: Long) = withContext(Dispatchers.IO) {
+        val loan = loanDao.getLoanById(loanId) ?: return@withContext
+        val updatedLoan = loan.copy(totalAmount = newAmount, dateGiven = newDate)
+        loanDao.update(updatedLoan)
+        
+        val totalPaid = paymentDao.getTotalPaidForLoan(loanId)
+        if (totalPaid >= newAmount) {
+            if (!loan.isCompleted) {
+                loanDao.markCompleted(loanId, System.currentTimeMillis())
+            }
+        } else {
+            if (loan.isCompleted) {
+                loanDao.markIncomplete(loanId)
+            }
+        }
+    }
+
+    @Transaction
     suspend fun updatePaymentAmount(paymentId: Long, newAmount: Double) = withContext(Dispatchers.IO) {
         val payment = paymentDao.getPaymentById(paymentId) ?: return@withContext
         val updatedPayment = payment.copy(amount = newAmount)
+        paymentDao.update(updatedPayment)
+        
+        val loanId = payment.loanId
+        val loan = loanDao.getLoanById(loanId)
+        if (loan != null) {
+            val totalPaid = paymentDao.getTotalPaidForLoan(loanId)
+            if (totalPaid >= loan.totalAmount) {
+                if (!loan.isCompleted) {
+                    loanDao.markCompleted(loanId, System.currentTimeMillis())
+                }
+            } else {
+                if (loan.isCompleted) {
+                    loanDao.markIncomplete(loanId)
+                }
+            }
+        }
+    }
+
+    @Transaction
+    suspend fun updatePayment(paymentId: Long, newAmount: Double, newDate: Long) = withContext(Dispatchers.IO) {
+        val payment = paymentDao.getPaymentById(paymentId) ?: return@withContext
+        val updatedPayment = payment.copy(amount = newAmount, date = newDate)
         paymentDao.update(updatedPayment)
         
         val loanId = payment.loanId

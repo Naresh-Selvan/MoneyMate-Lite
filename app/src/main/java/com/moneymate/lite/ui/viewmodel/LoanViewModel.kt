@@ -154,9 +154,27 @@ class LoanViewModel @Inject constructor(
         }
     }
 
+    suspend fun updateLoan(loanId: Long, newAmount: Double, newDate: Long): Result<Unit> {
+        return try {
+            repository.updateLoan(loanId, newAmount, newDate)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun updatePaymentAmount(paymentId: Long, newAmount: Double): Result<Unit> {
         return try {
             repository.updatePaymentAmount(paymentId, newAmount)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updatePayment(paymentId: Long, newAmount: Double, newDate: Long): Result<Unit> {
+        return try {
+            repository.updatePayment(paymentId, newAmount, newDate)
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
