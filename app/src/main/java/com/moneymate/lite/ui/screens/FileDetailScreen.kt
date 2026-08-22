@@ -762,7 +762,7 @@ private fun AddTransactionDialog(
 ) {
     var selectedPerson by remember { mutableStateOf<Person?>(preSelectedPerson) }
     var showPersonSelector by remember { mutableStateOf(false) }
-    var isGiven by remember { mutableStateOf(true) }
+    var isGiven by remember { mutableStateOf(false) }
     var amountText by remember { mutableStateOf("") }
     var amountError by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -1300,12 +1300,14 @@ private fun PersonCard(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                person.mobileNumber?.let { mobile ->
-                    Text(
-                        text = mobile,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                person.mobileNumber?.split(",")?.filter { it.isNotBlank() }?.joinToString(", ")?.let { mobile ->
+                    if (mobile.isNotEmpty()) {
+                        Text(
+                            text = mobile,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
                 person.place?.let { place ->
                     Text(
@@ -1348,20 +1350,29 @@ private fun PersonCard(
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false }
                 ) {
-                    DropdownMenuItem(
-                        text = { Text("Call") },
-                        onClick = {
-                            showMenu = false
-                            if (!person.mobileNumber.isNullOrBlank()) {
-                                val intent = android.content.Intent(android.content.Intent.ACTION_DIAL).apply {
-                                    data = android.net.Uri.parse("tel:${person.mobileNumber}")
-                                }
-                                context.startActivity(intent)
-                            }
-                        },
-                        leadingIcon = { Icon(Icons.Default.Call, contentDescription = null) },
-                        enabled = !person.mobileNumber.isNullOrBlank()
-                    )
+                    val numbers = person.mobileNumber?.split(",")?.filter { it.isNotBlank() } ?: emptyList()
+                    if (numbers.isEmpty()) {
+                        DropdownMenuItem(
+                            text = { Text("Call") },
+                            onClick = { showMenu = false },
+                            leadingIcon = { Icon(Icons.Default.Call, contentDescription = null) },
+                            enabled = false
+                        )
+                    } else {
+                        numbers.forEach { number ->
+                            DropdownMenuItem(
+                                text = { Text("Call: $number") },
+                                onClick = {
+                                    showMenu = false
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_DIAL).apply {
+                                        data = android.net.Uri.parse("tel:${number.trim()}")
+                                    }
+                                    context.startActivity(intent)
+                                },
+                                leadingIcon = { Icon(Icons.Default.Call, contentDescription = null) }
+                            )
+                        }
+                    }
                     DropdownMenuItem(
                         text = { Text("Edit") },
                         onClick = {

@@ -126,7 +126,7 @@ class LoanRepository @Inject constructor(
     suspend fun addGivenTransaction(personId: Long, amount: Double, date: Long) = withContext(Dispatchers.IO) {
         val activeLoan = loanDao.getActiveLoanByPerson(personId)
         if (activeLoan != null) {
-            val updatedLoan = activeLoan.copy(totalAmount = activeLoan.totalAmount + amount)
+            val updatedLoan = activeLoan.copy(totalAmount = activeLoan.totalAmount + amount, dateGiven = date)
             loanDao.update(updatedLoan)
             
             val totalPaid = paymentDao.getTotalPaidForLoan(activeLoan.id)

@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 20,
-  "latestVersionName": "1.0.20",
+  "latestVersionCode": 21,
+  "latestVersionName": "1.0.21",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Allow editing date when adding/editing customer details and editing amount & date of recorded payments."
+  "changelog": "Added support for multiple contact numbers per customer and fixed Date View updating correctly when adding new 'Given' transactions."
 }

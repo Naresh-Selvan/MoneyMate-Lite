@@ -55,7 +55,12 @@ fun AddEditPersonDialog(
     onSave: (AddEditPersonResult) -> Unit
 ) {
     var name by remember { mutableStateOf(existingPerson?.name ?: "") }
-    var mobileNumber by remember { mutableStateOf(existingPerson?.mobileNumber ?: "") }
+    var mobileNumbers by remember { 
+        val existing = existingPerson?.mobileNumber?.split(",")?.filter { it.isNotBlank() } ?: emptyList()
+        mutableStateOf(if (existing.isEmpty()) listOf("") else existing)
+    }
+    var mobileErrors by remember { mutableStateOf(List(mobileNumbers.size) { false }) }
+    var activeContactIndex by remember { mutableStateOf<Int?>(null) }
     var place by remember { mutableStateOf(existingPerson?.place ?: "") }
     var notes by remember { mutableStateOf(existingPerson?.notes ?: "") }
     var loanDateMillis by remember { mutableStateOf(existingLoanDate ?: System.currentTimeMillis()) }
@@ -84,7 +89,6 @@ fun AddEditPersonDialog(
         )
     }
     var nameError by remember { mutableStateOf(false) }
-    var mobileError by remember { mutableStateOf(false) }
     var amountError by remember { mutableStateOf(false) }
     var serialNumberError by remember { mutableStateOf(false) }
 
@@ -122,8 +126,17 @@ fun AddEditPersonDialog(
                                 } else {
                                     digitsOnly
                                 }
-                                mobileNumber = last10
-                                mobileError = false
+                                activeContactIndex?.let { index ->
+                                    if (index in mobileNumbers.indices) {
+                                        val newList = mobileNumbers.toMutableList()
+                                        newList[index] = last10
+                                        mobileNumbers = newList
+                                        
+                                        val newErrors = mobileErrors.toMutableList()
+                                        if (index < newErrors.size) newErrors[index] = false
+                                        mobileErrors = newErrors
+                                    }
+                                }
                             }
                             
                             if (name.isBlank() && nameIndex >= 0) {
@@ -147,12 +160,15 @@ fun AddEditPersonDialog(
         } else {
             nameError = false
         }
-        if (mobileNumber.isNotBlank() && !mobileNumber.matches(Regex("^\\d{10}$"))) {
-            mobileError = true
-            valid = false
-        } else {
-            mobileError = false
+        var hasMobileError = false
+        val newMobileErrors = mobileNumbers.map { num ->
+            val isErr = num.isNotBlank() && !num.matches(Regex("^\\d{10}$"))
+            if (isErr) hasMobileError = true
+            isErr
         }
+        mobileErrors = newMobileErrors
+        if (hasMobileError) valid = false
+
         if (!isEditMode || existingLoanAmount != null) {
             val amount = totalAmountText.toDoubleOrNull()
             if (amount == null || amount <= 0) {
@@ -236,32 +252,70 @@ fun AddEditPersonDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                OutlinedTextField(
-                    value = mobileNumber,
-                    onValueChange = { mobileNumber = it; mobileError = false },
-                    label = { Text("Mobile Number") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                    trailingIcon = {
-                        IconButton(onClick = {
-                            val intent = Intent(
-                                Intent.ACTION_PICK,
-                                android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI
-                            )
-                            contactPickerLauncher.launch(intent)
-                        }) {
-                            Icon(
-                                imageVector = Icons.Default.Contacts,
-                                contentDescription = "Select Contact"
-                            )
+                mobileNumbers.forEachIndexed { index, number ->
+                    androidx.compose.foundation.layout.Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = number,
+                            onValueChange = { newVal ->
+                                val newList = mobileNumbers.toMutableList()
+                                newList[index] = newVal
+                                mobileNumbers = newList
+                                
+                                val newErrors = mobileErrors.toMutableList()
+                                if (index < newErrors.size) newErrors[index] = false
+                                mobileErrors = newErrors
+                            },
+                            label = { Text(if (mobileNumbers.size == 1) "Mobile Number" else "Mobile Number ${index + 1}") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                            trailingIcon = {
+                                IconButton(onClick = {
+                                    activeContactIndex = index
+                                    val intent = Intent(
+                                        Intent.ACTION_PICK,
+                                        android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI
+                                    )
+                                    contactPickerLauncher.launch(intent)
+                                }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Contacts,
+                                        contentDescription = "Select Contact"
+                                    )
+                                }
+                            },
+                            isError = if (index < mobileErrors.size) mobileErrors[index] else false,
+                            supportingText = if (index < mobileErrors.size && mobileErrors[index]) {
+                                { Text("Must be 10 digits") }
+                            } else null,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        if (mobileNumbers.size > 1) {
+                            IconButton(onClick = {
+                                val newList = mobileNumbers.toMutableList()
+                                newList.removeAt(index)
+                                mobileNumbers = newList
+                                
+                                val newErrors = mobileErrors.toMutableList()
+                                if (index < newErrors.size) newErrors.removeAt(index)
+                                mobileErrors = newErrors
+                            }) {
+                                Icon(androidx.compose.material.icons.Icons.Default.Close, contentDescription = "Remove number")
+                            }
                         }
-                    },
-                    isError = mobileError,
-                    supportingText = if (mobileError) {
-                        { Text("Must be 10 digits") }
-                    } else null,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                TextButton(onClick = {
+                    mobileNumbers = mobileNumbers + listOf("")
+                    mobileErrors = mobileErrors + listOf(false)
+                }) {
+                    Text("Add Another Number")
+                }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -332,10 +386,11 @@ fun AddEditPersonDialog(
                 if (validate()) {
                     val initialLoanAmount = totalAmountText.toDoubleOrNull() ?: 0.0
                     val targetPos = serialNumberText.toIntOrNull() ?: (currentPersonsCount + 1)
+                    val joinedMobileNumbers = mobileNumbers.filter { it.isNotBlank() }.joinToString(",")
                     val person = if (isEditMode) {
                         existingPerson.copy(
                             name = name.trim(),
-                            mobileNumber = mobileNumber.ifBlank { null },
+                            mobileNumber = joinedMobileNumbers.ifBlank { null },
                             place = place.ifBlank { null },
                             notes = notes.ifBlank { null }
                         )
@@ -343,7 +398,7 @@ fun AddEditPersonDialog(
                         Person(
                             fileId = fileId,
                             name = name.trim(),
-                            mobileNumber = mobileNumber.ifBlank { null },
+                            mobileNumber = joinedMobileNumbers.ifBlank { null },
                             place = place.ifBlank { null },
                             notes = notes.ifBlank { null }
                         )

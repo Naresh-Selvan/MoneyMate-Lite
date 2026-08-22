@@ -143,12 +143,14 @@ fun PersonDetailScreen(
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    p.mobileNumber?.let { mobile ->
-                        Text(
-                            text = mobile,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    p.mobileNumber?.split(",")?.filter { it.isNotBlank() }?.joinToString(", ")?.let { mobile ->
+                        if (mobile.isNotEmpty()) {
+                            Text(
+                                text = mobile,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                     p.place?.let { place ->
                         Text(
