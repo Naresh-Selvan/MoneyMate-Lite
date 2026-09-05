@@ -95,7 +95,7 @@ class RestoreHelper @Inject constructor() {
                                 id = fileId,
                                 name = fileName,
                                 createdAt = if (safeGetLong(fileDoc, "createdAt") > 0) safeGetLong(fileDoc, "createdAt") else System.currentTimeMillis(),
-                                isDeleted = false // Force false to ensure it is visible in the main list
+                                isDeleted = safeGetBoolean(fileDoc, "isDeleted")
                             )
                             loanFileRepository.insert(file)
                             restoredFilesCount++
@@ -125,7 +125,8 @@ class RestoreHelper @Inject constructor() {
 
                             for (personDoc in personsSnapshot.documents) {
                                 val personId = personDoc.id.toLongId()
-                                val personFileIdStr = personDoc.getString("fileId") ?: fileDoc.id
+                                val fileIdRaw = personDoc.get("fileId")
+                                val personFileId = if (fileIdRaw != null) safeGetLong(personDoc, "fileId") else fileDoc.id.toLongId()
                                 val personName = personDoc.getString("name") ?: ""
                                 val mobile = personDoc.getString("mobileNumber")
                                     ?: personDoc.getString("phone")
@@ -138,14 +139,14 @@ class RestoreHelper @Inject constructor() {
                                 try {
                                     val person = Person(
                                         id = personId,
-                                        fileId = personFileIdStr.toLongId(),
+                                        fileId = personFileId,
                                         name = personName,
                                         mobileNumber = mobile,
                                         place = place,
                                         notes = personDoc.getString("notes"),
                                         sortOrder = safeGetLong(personDoc, "sortOrder").toInt(),
                                         createdAt = if (safeGetLong(personDoc, "createdAt") > 0) safeGetLong(personDoc, "createdAt") else System.currentTimeMillis(),
-                                        isDeleted = false // Force false to ensure visible
+                                        isDeleted = safeGetBoolean(personDoc, "isDeleted")
                                     )
                                     personRepository.insert(person)
                                     restoredPersonsCount++
@@ -170,7 +171,8 @@ class RestoreHelper @Inject constructor() {
                                     android.util.Log.d("RestoreHelper", "Restoring loan (New Schema) for customer: $personName")
                                     for (loanDoc in loansSnapshot.documents) {
                                         val loanId = loanDoc.id.toLongId()
-                                        val loanPersonIdStr = loanDoc.getString("personId") ?: personDoc.id
+                                        val personIdRaw = loanDoc.get("personId")
+                                        val loanPersonId = if (personIdRaw != null) safeGetLong(loanDoc, "personId") else personDoc.id.toLongId()
                                         
                                         val totalAmount = safeGetDouble(loanDoc, "totalAmount").takeIf { it > 0 }
                                             ?: safeGetDouble(loanDoc, "amount")
@@ -183,13 +185,13 @@ class RestoreHelper @Inject constructor() {
                                         try {
                                             val loan = Loan(
                                                 id = loanId,
-                                                personId = loanPersonIdStr.toLongId(),
+                                                personId = loanPersonId,
                                                 totalAmount = totalAmount,
                                                 dateGiven = if (dateGiven > 0) dateGiven else System.currentTimeMillis(),
                                                 isCompleted = safeGetBoolean(loanDoc, "isCompleted"),
                                                 completedAt = safeGetTimestampLong(loanDoc, "completedAt"),
                                                 createdAt = if (safeGetLong(loanDoc, "createdAt") > 0) safeGetLong(loanDoc, "createdAt") else System.currentTimeMillis(),
-                                                isDeleted = false // Force active
+                                                isDeleted = safeGetBoolean(loanDoc, "isDeleted")
                                             )
                                             loanRepository.insertLoan(loan)
                                             restoredLoansCount++
@@ -232,7 +234,7 @@ class RestoreHelper @Inject constructor() {
                                                         amount = pAmount,
                                                         date = if (pDate > 0) pDate else System.currentTimeMillis(),
                                                         createdAt = if (safeGetLong(paymentDoc, "createdAt") > 0) safeGetLong(paymentDoc, "createdAt") else System.currentTimeMillis(),
-                                                        isDeleted = false
+                                                        isDeleted = safeGetBoolean(paymentDoc, "isDeleted")
                                                     )
                                                     paymentRepository.insert(payment)
                                                     restoredPaymentsCount++
@@ -265,7 +267,7 @@ class RestoreHelper @Inject constructor() {
                                             isCompleted = isCompleted,
                                             completedAt = completedAt,
                                             createdAt = if (dateGiven > 0) dateGiven else System.currentTimeMillis(),
-                                            isDeleted = false
+                                            isDeleted = safeGetBoolean(personDoc, "isDeleted")
                                         )
                                         loanRepository.insertLoan(virtualLoan)
                                         restoredLoansCount++
@@ -308,7 +310,7 @@ class RestoreHelper @Inject constructor() {
                                                     amount = pAmount,
                                                     date = if (pDate > 0) pDate else System.currentTimeMillis(),
                                                     createdAt = if (safeGetLong(paymentDoc, "createdAt") > 0) safeGetLong(paymentDoc, "createdAt") else System.currentTimeMillis(),
-                                                    isDeleted = false
+                                                    isDeleted = safeGetBoolean(paymentDoc, "isDeleted")
                                                 )
                                                 paymentRepository.insert(payment)
                                                 restoredPaymentsCount++

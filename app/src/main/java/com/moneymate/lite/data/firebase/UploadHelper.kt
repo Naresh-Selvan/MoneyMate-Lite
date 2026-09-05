@@ -12,6 +12,7 @@ import com.moneymate.lite.data.repository.PaymentRepository
 import com.moneymate.lite.data.repository.PersonRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -32,31 +33,27 @@ class UploadHelper @Inject constructor() {
 
             val files = loanFileRepository.getAllFiles().first()
             for (file in files) {
-                if (file.isDeleted) continue
                 val fileRef = db.collection("files").document(userId)
                     .collection("loan_files").document(file.id.toString())
-                fileRef.set(file)
+                fileRef.set(file).await()
 
                 val persons = personRepository.getPersonsByFile(file.id).first()
                 for (person in persons) {
-                    if (person.isDeleted) continue
                     val personRef = fileRef.collection("persons")
                         .document(person.id.toString())
-                    personRef.set(person)
+                    personRef.set(person).await()
 
                     val loans = loanRepository.getLoansByPerson(person.id).first()
                     for (loan in loans) {
-                        if (loan.isDeleted) continue
                         val loanRef = personRef.collection("loans")
                             .document(loan.id.toString())
-                        loanRef.set(loan)
+                        loanRef.set(loan).await()
 
                         val payments = paymentRepository.getPaymentsByLoan(loan.id).first()
                         for (payment in payments) {
-                            if (payment.isDeleted) continue
                             loanRef.collection("payments")
                                 .document(payment.id.toString())
-                                .set(payment)
+                                .set(payment).await()
                         }
                     }
                 }

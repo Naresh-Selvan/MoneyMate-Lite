@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 21,
-  "latestVersionName": "1.0.21",
+  "latestVersionCode": 22,
+  "latestVersionName": "1.0.22",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Added support for multiple contact numbers per customer and fixed Date View updating correctly when adding new 'Given' transactions."
+  "changelog": "Fixed Firebase cloud backup and restore to properly handle deleted items and resolve ID parsing crashes."
 }
