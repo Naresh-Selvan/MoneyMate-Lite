@@ -167,6 +167,8 @@ fun SettingsScreen(
                         )
                     }
 
+                    val backupProgressText by settingsViewModel.backupProgress.collectAsState()
+
                     Button(
                         onClick = {
                             settingsViewModel.backup { result ->
@@ -182,12 +184,12 @@ fun SettingsScreen(
                     ) {
                         if (isBackingUp) {
                             CircularProgressIndicator(
-                                modifier = Modifier.padding(end = 8.dp),
+                                modifier = Modifier.padding(end = 8.dp).size(18.dp),
                                 strokeWidth = 2.dp,
                                 color = MaterialTheme.colorScheme.onPrimary
                             )
                         }
-                        Text(if (isBackingUp) "Backing up..." else "Backup Now")
+                        Text(if (isBackingUp) backupProgressText ?: "Backing up..." else "Backup Now")
                     }
 
                     Button(

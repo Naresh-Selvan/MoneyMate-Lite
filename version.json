@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 22,
-  "latestVersionName": "1.0.22",
+  "latestVersionCode": 23,
+  "latestVersionName": "1.0.23",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Fixed Firebase cloud backup and restore to properly handle deleted items and resolve ID parsing crashes."
+  "changelog": "Significantly sped up Firebase backups using batched writes and added real-time upload progress tracking."
 }

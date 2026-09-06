@@ -28,20 +28,28 @@ class SettingsViewModel @Inject constructor(
     private val _isBackingUp = MutableStateFlow(false)
     val isBackingUp: StateFlow<Boolean> = _isBackingUp.asStateFlow()
 
+    private val _backupProgress = MutableStateFlow<String?>(null)
+    val backupProgress: StateFlow<String?> = _backupProgress.asStateFlow()
+
     private val _isRestoring = MutableStateFlow(false)
     val isRestoring: StateFlow<Boolean> = _isRestoring.asStateFlow()
 
     fun backup(onResult: (Result<Unit>) -> Unit) {
         if (_isBackingUp.value || _isRestoring.value) return
         _isBackingUp.value = true
+        _backupProgress.value = "Preparing data..."
         viewModelScope.launch {
             val result = uploadHelper.uploadAll(
                 loanFileRepository = loanFileRepository,
                 personRepository = personRepository,
                 loanRepository = loanRepository,
-                paymentRepository = paymentRepository
+                paymentRepository = paymentRepository,
+                onProgress = { current, total ->
+                    _backupProgress.value = "Uploading $current / $total"
+                }
             )
             _isBackingUp.value = false
+            _backupProgress.value = null
             onResult(result)
         }
     }
