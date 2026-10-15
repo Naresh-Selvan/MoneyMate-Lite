@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 23,
-  "latestVersionName": "1.0.23",
+  "latestVersionCode": 24,
+  "latestVersionName": "1.0.24",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Significantly sped up Firebase backups using batched writes and added real-time upload progress tracking."
+  "changelog": "Preserve current page position and search/filter state when navigating back from customer details."
 }

@@ -57,6 +57,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
@@ -109,11 +110,11 @@ fun FileDetailScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var editingPerson by remember { mutableStateOf<Person?>(null) }
     var deletingPerson by remember { mutableStateOf<Person?>(null) }
-    var isSearchActive by remember { mutableStateOf(false) }
-    var searchQuery by remember { mutableStateOf("") }
+    var isSearchActive by rememberSaveable { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
 
-    var isDateFilterActive by remember { mutableStateOf(false) }
-    var selectedDateMillis by remember { mutableStateOf(System.currentTimeMillis()) }
+    var isDateFilterActive by rememberSaveable { mutableStateOf(false) }
+    var selectedDateMillis by rememberSaveable { mutableStateOf(System.currentTimeMillis()) }
     var showDatePickerForFilter by remember { mutableStateOf(false) }
     var showAddTransactionDialog by remember { mutableStateOf(false) }
     var editingTransaction by remember { mutableStateOf<DateTransaction?>(null) }
@@ -122,7 +123,7 @@ fun FileDetailScreen(
 
 
     // Pagination states
-    var currentPage by remember { mutableStateOf(1) }
+    var currentPage by rememberSaveable { mutableStateOf(1) }
     val pageSize = 20
 
     // Date formatting helper
@@ -135,8 +136,10 @@ fun FileDetailScreen(
         if (isSearchActive) {
             isSearchActive = false
             searchQuery = ""
+            currentPage = 1
         } else if (isDateFilterActive) {
             isDateFilterActive = false
+            currentPage = 1
         }
     }
 
@@ -225,9 +228,9 @@ fun FileDetailScreen(
         maxOf(1, kotlin.math.ceil(filteredPersons.size.toDouble() / pageSize).toInt())
     }
 
-    LaunchedEffect(filteredPersons.size) {
-        if (currentPage > totalPages) {
-            currentPage = 1
+    LaunchedEffect(filteredPersons.size, totalPages) {
+        if (filteredPersons.isNotEmpty() && currentPage > totalPages) {
+            currentPage = totalPages.coerceAtLeast(1)
         }
     }
 
@@ -243,7 +246,10 @@ fun FileDetailScreen(
                     if (isSearchActive) {
                         OutlinedTextField(
                             value = searchQuery,
-                            onValueChange = { searchQuery = it },
+                            onValueChange = {
+                                searchQuery = it
+                                currentPage = 1
+                            },
                             placeholder = { Text("Search customer...", color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)) },
                             singleLine = true,
                             colors = TextFieldDefaults.colors(
@@ -277,6 +283,7 @@ fun FileDetailScreen(
                         IconButton(onClick = {
                             isSearchActive = false
                             searchQuery = ""
+                            currentPage = 1
                         }) {
                             Icon(
                                 Icons.Default.Close,
@@ -287,6 +294,7 @@ fun FileDetailScreen(
                     } else if (isDateFilterActive) {
                         IconButton(onClick = {
                             isDateFilterActive = false
+                            currentPage = 1
                         }) {
                             Icon(
                                 Icons.Default.Close,
@@ -329,6 +337,7 @@ fun FileDetailScreen(
                         IconButton(onClick = {
                             isSearchActive = true
                             isDateFilterActive = false
+                            currentPage = 1
                         }) {
                             Icon(
                                 Icons.Default.Search,
@@ -674,6 +683,7 @@ fun FileDetailScreen(
                     datePickerState.selectedDateMillis?.let {
                         selectedDateMillis = it
                         isDateFilterActive = true
+                        currentPage = 1
                     }
                     showDatePickerForFilter = false
                 }) {

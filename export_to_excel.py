@@ -16,7 +16,11 @@ cred = credentials.Certificate(key_path)
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 
-uid = "0xeS6f57bOUwFps3oW6Y9FcVzct1"
+print("Please enter your Firebase User ID (UID). You can find this in the Firebase Console under Authentication.")
+uid = input("Firebase UID: ").strip()
+if not uid:
+    print("ERROR: UID cannot be empty.")
+    sys.exit(1)
 files_ref = db.collection("files").document(uid).collection("loan_files")
 
 def safe_datetime_str(timestamp):
