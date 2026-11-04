@@ -16,8 +16,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -126,20 +128,38 @@ fun FileDetailScreen(
     var currentPage by rememberSaveable { mutableStateOf(1) }
     val pageSize = 20
 
+    val dateListState = rememberLazyListState()
+    val personListState = rememberLazyListState()
+
+    // Reset scroll to top whenever page changes or when toggling date filter
+    LaunchedEffect(currentPage, isDateFilterActive) {
+        if (isDateFilterActive) {
+            dateListState.scrollToItem(0)
+        } else {
+            personListState.scrollToItem(0)
+        }
+    }
+
     // Date formatting helper
     val dateFormat = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
     val dateString = remember(selectedDateMillis) {
         dateFormat.format(Date(selectedDateMillis))
     }
 
-    BackHandler(enabled = isSearchActive || isDateFilterActive) {
+    BackHandler(enabled = isSearchActive || isDateFilterActive || currentPage > 1) {
         if (isSearchActive) {
             isSearchActive = false
             searchQuery = ""
             currentPage = 1
         } else if (isDateFilterActive) {
-            isDateFilterActive = false
-            currentPage = 1
+            if (currentPage > 1) {
+                currentPage--
+            } else {
+                isDateFilterActive = false
+                currentPage = 1
+            }
+        } else if (currentPage > 1) {
+            currentPage--
         }
     }
 
@@ -293,17 +313,27 @@ fun FileDetailScreen(
                         }
                     } else if (isDateFilterActive) {
                         IconButton(onClick = {
-                            isDateFilterActive = false
-                            currentPage = 1
+                            if (currentPage > 1) {
+                                currentPage--
+                            } else {
+                                isDateFilterActive = false
+                                currentPage = 1
+                            }
                         }) {
                             Icon(
-                                Icons.Default.Close,
-                                contentDescription = "Close Date Filter",
+                                imageVector = if (currentPage > 1) Icons.AutoMirrored.Filled.ArrowBack else Icons.Default.Close,
+                                contentDescription = if (currentPage > 1) "Previous Page" else "Close Date Filter",
                                 tint = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         }
                     } else {
-                        IconButton(onClick = { navController.popBackStack() }) {
+                        IconButton(onClick = {
+                            if (currentPage > 1) {
+                                currentPage--
+                            } else {
+                                navController.popBackStack()
+                            }
+                        }) {
                             Icon(
                                 Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "Back",
@@ -370,14 +400,44 @@ fun FileDetailScreen(
             )
         }
     ) { paddingValues ->
-        if (isDateFilterActive) {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(16.dp)
-            ) {
+        var offsetX by remember { mutableStateOf(0f) }
+        val minSwipeDistance = with(LocalDensity.current) { 40.dp.toPx() }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .pointerInput(currentPage, totalPages) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            if (offsetX < -minSwipeDistance) {
+                                if (currentPage < totalPages) {
+                                    currentPage++
+                                }
+                            } else if (offsetX > minSwipeDistance) {
+                                if (currentPage > 1) {
+                                    currentPage--
+                                }
+                            }
+                            offsetX = 0f
+                        },
+                        onDragCancel = {
+                            offsetX = 0f
+                        },
+                        onHorizontalDrag = { change, dragAmount ->
+                            change.consume()
+                            offsetX += dragAmount
+                        }
+                    )
+                }
+        ) {
+            if (isDateFilterActive) {
+                LazyColumn(
+                    state = dateListState,
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(16.dp)
+                ) {
                 item {
                     TransactionSummaryCard(
                         totalGiven = totalGiven,
@@ -473,115 +533,89 @@ fun FileDetailScreen(
                 }
             }
         } else {
-            var offsetX by remember { mutableStateOf(0f) }
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .pointerInput(totalPages) {
-                        detectHorizontalDragGestures(
-                            onDragEnd = {
-                                if (offsetX < -100f) {
-                                    if (currentPage < totalPages) {
-                                        currentPage++
-                                    }
-                                } else if (offsetX > 100f) {
-                                    if (currentPage > 1) {
-                                        currentPage--
-                                    }
-                                }
-                                offsetX = 0f
-                            },
-                            onHorizontalDrag = { change, dragAmount ->
-                                change.consume()
-                                offsetX += dragAmount
-                            }
-                        )
-                    }
-            ) {
-                if (persons.isEmpty()) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "No customers yet. Tap + to add one.",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(32.dp)
-                        )
-                    }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        contentPadding = PaddingValues(16.dp)
-                    ) {
-                        if (paginatedPersons.isEmpty() && searchQuery.isNotEmpty()) {
-                            item {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(32.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "No results found for \"$searchQuery\"",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-                            }
-                        } else {
-                            itemsIndexed(
-                                items = paginatedPersons,
-                                key = { _, person -> person.id }
-                            ) { index, person ->
-                                val activeLoan = activeLoanMap[person.id]
-                                val globalIndex = (currentPage - 1) * pageSize + index
-
-                                PersonCard(
-                                    index = globalIndex,
-                                    person = person,
-                                    activeLoan = activeLoan,
-                                    onEdit = { editingPerson = person },
-                                    onDelete = { deletingPerson = person },
-                                    onClick = {
-                                        navController.navigate("person_detail/${person.id}")
-                                    }
+            if (persons.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No customers yet. Tap + to add one.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(32.dp)
+                    )
+                }
+            } else {
+                LazyColumn(
+                    state = personListState,
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(16.dp)
+                ) {
+                    if (paginatedPersons.isEmpty() && searchQuery.isNotEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(32.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "No results found for \"$searchQuery\"",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
                                 )
                             }
+                        }
+                    } else {
+                        itemsIndexed(
+                            items = paginatedPersons,
+                            key = { _, person -> person.id }
+                        ) { index, person ->
+                            val activeLoan = activeLoanMap[person.id]
+                            val globalIndex = (currentPage - 1) * pageSize + index
 
-                            if (totalPages > 1) {
-                                item {
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 8.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
+                            PersonCard(
+                                index = globalIndex,
+                                person = person,
+                                activeLoan = activeLoan,
+                                onEdit = { editingPerson = person },
+                                onDelete = { deletingPerson = person },
+                                onClick = {
+                                    navController.navigate("person_detail/${person.id}")
+                                }
+                            )
+                        }
+
+                        if (totalPages > 1) {
+                            item {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    TextButton(
+                                        onClick = { if (currentPage > 1) currentPage-- },
+                                        enabled = currentPage > 1
                                     ) {
-                                        TextButton(
-                                            onClick = { if (currentPage > 1) currentPage-- },
-                                            enabled = currentPage > 1
-                                        ) {
-                                            Text("Previous")
-                                        }
-                                        Text(
-                                            text = "Page $currentPage of $totalPages",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        TextButton(
-                                            onClick = { if (currentPage < totalPages) currentPage++ },
-                                            enabled = currentPage < totalPages
-                                        ) {
-                                            Text("Next")
-                                        }
+                                        Text("Previous")
+                                    }
+                                    Text(
+                                        text = "Page $currentPage of $totalPages",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    TextButton(
+                                        onClick = { if (currentPage < totalPages) currentPage++ },
+                                        enabled = currentPage < totalPages
+                                    ) {
+                                        Text("Next")
                                     }
                                 }
                             }
