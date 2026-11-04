@@ -625,6 +625,7 @@ fun FileDetailScreen(
             }
         }
     }
+}
 
     // Add person dialog
     if (showAddDialog) {
