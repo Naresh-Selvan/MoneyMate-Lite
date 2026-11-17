@@ -148,14 +148,43 @@ class UpdateViewModel @Inject constructor(
 
     private suspend fun downloadApk(spec: String): Result<java.io.File> = withContext(Dispatchers.IO) {
         try {
-            val url = URL(spec)
-            val connection = url.openConnection() as HttpURLConnection
-            connection.connectTimeout = 30000
-            connection.readTimeout = 30000
-            connection.connect()
+            var currentUrl = spec
+            var connection: HttpURLConnection? = null
+            var redirectCount = 0
+            val maxRedirects = 5
 
-            if (connection.responseCode != HttpURLConnection.HTTP_OK) {
-                return@withContext Result.failure(Exception("HTTP error: ${connection.responseCode}"))
+            while (redirectCount < maxRedirects) {
+                val url = URL(currentUrl)
+                val conn = (url.openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 30000
+                    readTimeout = 30000
+                    instanceFollowRedirects = true
+                    setRequestProperty("User-Agent", "MoneyMate-Lite-Android")
+                }
+                conn.connect()
+
+                val code = conn.responseCode
+                if (code == HttpURLConnection.HTTP_MOVED_PERM ||
+                    code == HttpURLConnection.HTTP_MOVED_TEMP ||
+                    code == HttpURLConnection.HTTP_SEE_OTHER ||
+                    code == 307 || code == 308
+                ) {
+                    val location = conn.getHeaderField("Location")
+                        ?: return@withContext Result.failure(Exception("Redirect with no Location header"))
+                    conn.disconnect()
+                    currentUrl = location
+                    redirectCount++
+                } else if (code == HttpURLConnection.HTTP_OK) {
+                    connection = conn
+                    break
+                } else {
+                    conn.disconnect()
+                    return@withContext Result.failure(Exception("HTTP error: $code"))
+                }
+            }
+
+            if (connection == null || connection.responseCode != HttpURLConnection.HTTP_OK) {
+                return@withContext Result.failure(Exception("Failed after redirects"))
             }
 
             val file = java.io.File(context.externalCacheDir ?: context.cacheDir, "update.apk")
@@ -181,6 +210,7 @@ class UpdateViewModel @Inject constructor(
             outputStream.flush()
             outputStream.close()
             inputStream.close()
+            connection.disconnect()
             Result.success(file)
         } catch (e: Exception) {
             Result.failure(e)

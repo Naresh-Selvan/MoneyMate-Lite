@@ -56,8 +56,9 @@ class WorkerRepository @Inject constructor(
                 return@withContext Result.failure(IllegalStateException("Username '$cleanUsername' is already taken. Please choose another."))
             }
 
-            // 2. Synthetic email for worker Firebase Auth account
-            val workerEmail = "$cleanUsername@$businessId.moneymate.internal"
+            // 2. Synthetic email for worker Firebase Auth account (must follow standard RFC 5322 format)
+            val cleanBizId = businessId.replace("[^a-zA-Z0-9]".toRegex(), "").lowercase().ifBlank { "biz" }
+            val workerEmail = "${cleanUsername}.${cleanBizId}@moneymate.com"
 
             // 3. Provision worker in Firebase Auth via secondary FirebaseApp to avoid signing out the owner
             val secondaryApp = try {

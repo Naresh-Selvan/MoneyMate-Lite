@@ -24,7 +24,7 @@ class WorkerAccessAndRoleTest {
             role = UserRole.WORKER,
             displayName = "John Worker",
             username = "john",
-            email = "john@biz_123.moneymate.internal",
+            email = "john.biz123@moneymate.com",
             accessAllFiles = true,
             allowedFileIds = emptyList()
         )
@@ -52,7 +52,7 @@ class WorkerAccessAndRoleTest {
             role = UserRole.WORKER,
             displayName = "Jane Worker",
             username = "jane",
-            email = "jane@biz_123.moneymate.internal",
+            email = "jane.biz123@moneymate.com",
             accessAllFiles = false,
             allowedFileIds = listOf("shared_2")
         )
@@ -103,7 +103,7 @@ class WorkerAccessAndRoleTest {
             role = UserRole.WORKER,
             displayName = "Disabled Worker",
             username = "badactor",
-            email = "badactor@biz_123.moneymate.internal",
+            email = "badactor.biz123@moneymate.com",
             accessAllFiles = true,
             allowedFileIds = emptyList(),
             isActive = false
@@ -120,7 +120,7 @@ class WorkerAccessAndRoleTest {
             role = UserRole.WORKER,
             displayName = "New Worker",
             username = "newbie",
-            email = "newbie@biz_123.moneymate.internal",
+            email = "newbie.biz123@moneymate.com",
             accessAllFiles = false,
             allowedFileIds = listOf("shared_1"),
             mustChangePassword = true
