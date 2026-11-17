@@ -37,26 +37,25 @@ object CollectionSheetPdfGenerator {
     private const val PAGE_HEIGHT = 1008
 
     private const val MARGIN_X = 20f
-    private const val MARGIN_TOP = 28f
-    private const val MARGIN_BOTTOM = 22f
-    private const val TABLE_GAP = 16f
+    private const val MARGIN_TOP = 20f
+    private const val MARGIN_BOTTOM = 20f
+    private const val TABLE_GAP = 14f
 
     // Total usable width = 612 - 40 = 572
-    // Each table width = (572 - 16) / 2 = 278
-    private const val TABLE_WIDTH = 278f
-    private const val NAME_COL_WIDTH = 88f
-    private const val BALANCE_COL_WIDTH = 46f
-    // 7 empty writing cells for collections: 144 / 7 = ~20.57f each
-    private const val EMPTY_CELL_WIDTH = 20.57f
+    // Each table width = (572 - 14) / 2 = 279
+    private const val TABLE_WIDTH = 279f
+    private const val NAME_COL_WIDTH = 90f
+    private const val BALANCE_COL_WIDTH = 32f // Reduced space for amount column!
+    // 7 empty writing cells for collections: (279 - 90 - 32) / 7 = 157 / 7 = ~22.43f each
+    private const val EMPTY_CELL_WIDTH = 22.43f
     private const val EMPTY_CELLS_COUNT = 7
 
-    private const val HEADER_ROW_HEIGHT = 22f
-    private const val DATA_ROW_HEIGHT = 24f
+    private const val DATA_ROW_HEIGHT = 24.2f
 
-    // Available height for rows: 1008 - 28 - 22 - 38 (header) - 22 (table header) = 898
-    // 898 / 24 = ~37 rows per column, 74 per page
-    private const val ROWS_PER_COLUMN = 36
-    private const val ITEMS_PER_PAGE = ROWS_PER_COLUMN * 2 // 72 per page
+    // Available height for rows: 1008 - 20 - 20 = 968
+    // 968 / 24.2 = 40 rows per column, 80 per page
+    private const val ROWS_PER_COLUMN = 40
+    private const val ITEMS_PER_PAGE = ROWS_PER_COLUMN * 2 // 80 per page
 
     fun generatePdf(
         context: Context,
@@ -81,36 +80,12 @@ object CollectionSheetPdfGenerator {
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
 
-        val headerTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.BLACK
-            textSize = 9.0f
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        }
-
-        val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.BLACK
-            textSize = 12.5f
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        }
-
-        val metaPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(70, 70, 70)
-            textSize = 8.5f
-            typeface = Typeface.DEFAULT
-        }
-
         val borderPaint = Paint().apply {
             color = Color.BLACK
             strokeWidth = 0.8f
             style = Paint.Style.STROKE
         }
 
-        val headerBgPaint = Paint().apply {
-            color = Color.rgb(238, 238, 238)
-            style = Paint.Style.FILL
-        }
-
-        val totalBalance = rows.sumOf { it.balance }
         val totalPages = maxOf(1, (rows.size + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE)
 
         for (pageIndex in 0 until totalPages) {
@@ -119,26 +94,8 @@ object CollectionSheetPdfGenerator {
             val page = pdfDocument.startPage(pageInfo)
             val canvas = page.canvas
 
-            // Page Header Top (y = 28 to 60)
-            var currentY = MARGIN_TOP
-
-            // Title Line
-            canvas.drawText("File: $fileName", MARGIN_X, currentY + 12f, titlePaint)
-            val centerTitle = "DAILY COLLECTION SHEET"
-            val centerTitleWidth = titlePaint.measureText(centerTitle)
-            canvas.drawText(centerTitle, (PAGE_WIDTH - centerTitleWidth) / 2f, currentY + 12f, titlePaint)
-            val dateText = "Date: $dateStr"
-            val dateWidth = titlePaint.measureText(dateText)
-            canvas.drawText(dateText, PAGE_WIDTH - MARGIN_X - dateWidth, currentY + 12f, titlePaint)
-
-            // Subtitle Line (only customer count and page, no outstanding total balance)
-            val summaryText = "Customers: ${rows.size}"
-            canvas.drawText(summaryText, MARGIN_X, currentY + 26f, metaPaint)
-            val pageStr = "Page $pageNumber of $totalPages (Legal Sheet)"
-            val pageStrWidth = metaPaint.measureText(pageStr)
-            canvas.drawText(pageStr, PAGE_WIDTH - MARGIN_X - pageStrWidth, currentY + 26f, metaPaint)
-
-            currentY += 34f
+            // No heading and no date: tables start directly from top margin
+            val currentY = MARGIN_TOP
 
             // Slice rows for this page
             val startIdx = pageIndex * ITEMS_PER_PAGE
@@ -161,8 +118,6 @@ object CollectionSheetPdfGenerator {
                 rows = leftColRows,
                 textPaint = textPaint,
                 balancePaint = balancePaint,
-                headerTextPaint = headerTextPaint,
-                headerBgPaint = headerBgPaint,
                 borderPaint = borderPaint
             )
 
@@ -174,8 +129,6 @@ object CollectionSheetPdfGenerator {
                 rows = rightColRows,
                 textPaint = textPaint,
                 balancePaint = balancePaint,
-                headerTextPaint = headerTextPaint,
-                headerBgPaint = headerBgPaint,
                 borderPaint = borderPaint
             )
 
@@ -202,8 +155,6 @@ object CollectionSheetPdfGenerator {
         rows: List<CollectionSheetRow>,
         textPaint: Paint,
         balancePaint: Paint,
-        headerTextPaint: Paint,
-        headerBgPaint: Paint,
         borderPaint: Paint
     ) {
         val xName = startX
@@ -215,25 +166,9 @@ object CollectionSheetPdfGenerator {
         }
         val endX = startX + TABLE_WIDTH
 
-        // Table Header Row
         var y = startY
-        canvas.drawRect(startX, y, endX, y + HEADER_ROW_HEIGHT, headerBgPaint)
-        canvas.drawRect(startX, y, endX, y + HEADER_ROW_HEIGHT, borderPaint)
 
-        // Vertical dividers in header
-        canvas.drawLine(xBalance, y, xBalance, y + HEADER_ROW_HEIGHT, borderPaint)
-        for (i in 0 until EMPTY_CELLS_COUNT) {
-            canvas.drawLine(xBoxes[i], y, xBoxes[i], y + HEADER_ROW_HEIGHT, borderPaint)
-        }
-
-        // Header text
-        val nameHeaderY = y + HEADER_ROW_HEIGHT / 2f + 3f
-        canvas.drawText("Customer Name", xName + 4f, nameHeaderY, headerTextPaint)
-        canvas.drawText("Balance", xBalance + 4f, nameHeaderY, headerTextPaint)
-
-        y += HEADER_ROW_HEIGHT
-
-        // Data Rows
+        // Data Rows start immediately from row 1 with NO heading row
         val rowCount = maxOf(rows.size, if (rows.isNotEmpty()) ROWS_PER_COLUMN else 0)
         for (rowIndex in 0 until rowCount) {
             val row = rows.getOrNull(rowIndex)
@@ -252,7 +187,7 @@ object CollectionSheetPdfGenerator {
             if (row != null) {
                 val textBaseline = rowTop + DATA_ROW_HEIGHT / 2f + 3.5f
 
-                // Formatted customer name with trailing '-' as requested in Word sample
+                // Formatted customer name with trailing '-' as in Word template
                 val formattedName = if (row.customerName.endsWith("-")) row.customerName else "${row.customerName}-"
                 val availableNameWidth = NAME_COL_WIDTH - 6f
                 val ellipsizedName = TextUtils.ellipsize(
@@ -263,16 +198,13 @@ object CollectionSheetPdfGenerator {
                 ).toString()
                 canvas.drawText(ellipsizedName, xName + 3f, textBaseline, textPaint)
 
-                // Formatted balance in first box next to name
-                val balanceText = "₹${"%.0f".format(row.balance)}"
-                val availableBalanceWidth = BALANCE_COL_WIDTH - 6f
-                val ellipsizedBalance = TextUtils.ellipsize(
-                    balanceText,
-                    TextPaint(balancePaint),
-                    availableBalanceWidth,
-                    TextUtils.TruncateAt.END
-                ).toString()
-                canvas.drawText(ellipsizedBalance, xBalance + 3f, textBaseline, balancePaint)
+                // Formatted balance in reduced amount column: NO rupee symbol!
+                if (row.balance > 0) {
+                    val balanceText = "%.0f".format(row.balance)
+                    val textWidth = balancePaint.measureText(balanceText)
+                    val textX = xBalance + (BALANCE_COL_WIDTH - textWidth) / 2f
+                    canvas.drawText(balanceText, textX, textBaseline, balancePaint)
+                }
 
                 // Boxes 1 through 7 remain empty for manual pencil/pen collection entry!
             }

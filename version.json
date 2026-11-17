@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 33,
-  "latestVersionName": "1.0.33",
+  "latestVersionCode": 34,
+  "latestVersionName": "1.0.34",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Fix direct PDF downloading to Downloads folder, remove total outstanding balance from collection sheet, fix migration PERMISSION_DENIED with updated Firestore rules, and add full multi-device cloud sync for files, customers, loans, and payments on worker login."
+  "changelog": "PDF collection sheet format update: removed date and heading, removed rupee symbol, reduced amount column width, and increased handwriting box space."
 }
