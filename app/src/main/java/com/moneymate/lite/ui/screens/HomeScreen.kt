@@ -2,6 +2,7 @@ package com.moneymate.lite.ui.screens
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,17 +13,28 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AssignmentTurnedIn
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.CloudQueue
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PendingActions
+import androidx.compose.material.icons.filled.SyncProblem
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,30 +57,40 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.moneymate.lite.data.entity.LoanFile
+import com.moneymate.lite.data.model.UserRole
+import com.moneymate.lite.ui.viewmodel.ApprovalViewModel
 import com.moneymate.lite.ui.viewmodel.AuthViewModel
 import com.moneymate.lite.ui.viewmodel.LoanFileViewModel
-import androidx.compose.runtime.LaunchedEffect
 import java.net.URLEncoder
 import kotlinx.coroutines.launch
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     navController: NavController,
     viewModel: LoanFileViewModel = hiltViewModel(),
-    authViewModel: AuthViewModel = hiltViewModel()
+    authViewModel: AuthViewModel = hiltViewModel(),
+    approvalViewModel: ApprovalViewModel = hiltViewModel()
 ) {
     val files by viewModel.files.collectAsState()
     val sortedFiles = remember(files) {
         files.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
     }
+    val userRole by authViewModel.userRole.collectAsState()
+    val isOnline by viewModel.isOnline.collectAsState()
+    val isSyncing by viewModel.isSyncing.collectAsState()
+    val pendingSyncCount by viewModel.pendingSyncCount.collectAsState()
+    val failedSyncCount by viewModel.failedSyncCount.collectAsState()
+    val pendingApprovalsCount by approvalViewModel.pendingCount.collectAsState()
+
     var showAddDialog by remember { mutableStateOf(false) }
     var showLogoutConfirm by remember { mutableStateOf(false) }
     var fileToDelete by remember { mutableStateOf<LoanFile?>(null) }
@@ -82,9 +104,43 @@ fun HomeScreen(
             TopAppBar(
                 title = { Text("MoneyMate Lite") },
                 actions = {
-                    IconButton(onClick = {
-                        showLogoutConfirm = true
-                    }) {
+                    if (userRole == UserRole.OWNER) {
+                        IconButton(onClick = { navController.navigate("pending_approvals") }) {
+                            Box {
+                                Icon(
+                                    Icons.Default.PendingActions,
+                                    contentDescription = "Pending Approvals",
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                if (pendingApprovalsCount > 0) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.error)
+                                            .padding(horizontal = 4.dp, vertical = 1.dp)
+                                    ) {
+                                        Text(
+                                            text = pendingApprovalsCount.toString(),
+                                            color = MaterialTheme.colorScheme.onError,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else if (userRole == UserRole.WORKER) {
+                        IconButton(onClick = { navController.navigate("my_requests") }) {
+                            Icon(
+                                Icons.Default.AssignmentTurnedIn,
+                                contentDescription = "My Requests",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+
+                    IconButton(onClick = { showLogoutConfirm = true }) {
                         Icon(
                             Icons.Default.ExitToApp,
                             contentDescription = "Sign out",
@@ -99,52 +155,67 @@ fun HomeScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddDialog = true },
-                containerColor = MaterialTheme.colorScheme.primary
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Add file")
+            // Workers cannot create files
+            if (userRole != UserRole.WORKER) {
+                FloatingActionButton(
+                    onClick = { showAddDialog = true },
+                    containerColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Add file")
+                }
             }
         }
     ) { paddingValues ->
-        if (sortedFiles.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "No files yet. Tap + to create one.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(32.dp)
-                )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(16.dp)
-            ) {
-                items(
-                    items = sortedFiles,
-                    key = { it.id }
-                ) { file ->
-                    FileCard(
-                        file = file,
-                        onDelete = { fileToDelete = file },
-                        onRename = {
-                            fileToRename = file
-                            renameText = file.name
-                        },
-                        onClick = {
-                            navController.navigate("file_detail/${file.id}?name=${URLEncoder.encode(file.name, "UTF-8")}")
-                        }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            // Live Connectivity & Sync Status Banner
+            SyncStatusBanner(
+                isOnline = isOnline,
+                isSyncing = isSyncing,
+                pendingSyncCount = pendingSyncCount,
+                failedSyncCount = failedSyncCount,
+                onRetry = { viewModel.refreshSync() }
+            )
+
+            if (sortedFiles.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (userRole == UserRole.WORKER) "No files assigned to your account yet." else "No files yet. Tap + to create one.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(32.dp)
                     )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(16.dp)
+                ) {
+                    items(
+                        items = sortedFiles,
+                        key = { it.id }
+                    ) { file ->
+                        FileCard(
+                            file = file,
+                            isWorker = userRole == UserRole.WORKER,
+                            onDelete = { fileToDelete = file },
+                            onRename = {
+                                fileToRename = file
+                                renameText = file.name
+                            },
+                            onClick = {
+                                navController.navigate("file_detail/${file.id}?name=${URLEncoder.encode(file.name, "UTF-8")}")
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -289,8 +360,88 @@ fun HomeScreen(
 }
 
 @Composable
+private fun SyncStatusBanner(
+    isOnline: Boolean,
+    isSyncing: Boolean,
+    pendingSyncCount: Int,
+    failedSyncCount: Int,
+    onRetry: () -> Unit
+) {
+    if (!isOnline) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFFFFF3E0))
+                .padding(horizontal = 16.dp, vertical = 6.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Default.CloudOff, contentDescription = null, tint = Color(0xFFE65100), modifier = Modifier.size(16.dp))
+                Text(
+                    text = if (pendingSyncCount > 0) "Offline mode • $pendingSyncCount payment(s) pending sync" else "Offline mode",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color(0xFFE65100)
+                )
+            }
+        }
+    } else if (failedSyncCount > 0) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFFFFEBEE))
+                .clickable { onRetry() }
+                .padding(horizontal = 16.dp, vertical = 6.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.SyncProblem, contentDescription = null, tint = Color(0xFFC62828), modifier = Modifier.size(16.dp))
+                    Text(
+                        text = "$failedSyncCount sync item(s) failed. Tap to retry.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color(0xFFC62828)
+                    )
+                }
+            }
+        }
+    } else if (isSyncing || pendingSyncCount > 0) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFFE3F2FD))
+                .padding(horizontal = 16.dp, vertical = 6.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(14.dp),
+                    strokeWidth = 2.dp,
+                    color = Color(0xFF1565C0)
+                )
+                Text(
+                    text = if (isSyncing) "Syncing with cloud..." else "$pendingSyncCount change(s) queued for sync",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color(0xFF1565C0)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun FileCard(
     file: LoanFile,
+    isWorker: Boolean,
     onDelete: () -> Unit,
     onRename: () -> Unit,
     onClick: () -> Unit
@@ -337,32 +488,35 @@ private fun FileCard(
                 }
             }
 
-            Box {
-                IconButton(onClick = { showMenu = true }) {
-                    Icon(
-                        Icons.Default.MoreVert,
-                        contentDescription = "Options",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Rename") },
-                        onClick = {
-                            showMenu = false
-                            onRename()
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Delete", color = Color(0xFFE53935)) },
-                        onClick = {
-                            showMenu = false
-                            onDelete()
-                        }
-                    )
+            // Workers cannot rename or delete files
+            if (!isWorker) {
+                Box {
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(
+                            Icons.Default.MoreVert,
+                            contentDescription = "Options",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Rename") },
+                            onClick = {
+                                showMenu = false
+                                onRename()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete", color = Color(0xFFE53935)) },
+                            onClick = {
+                                showMenu = false
+                                onDelete()
+                            }
+                        )
+                    }
                 }
             }
         }

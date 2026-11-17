@@ -1,5 +1,7 @@
 package com.moneymate.lite.data.repository
 
+import androidx.room.withTransaction
+import com.moneymate.lite.data.AppDatabase
 import com.moneymate.lite.data.dao.PersonDao
 import com.moneymate.lite.data.entity.Person
 import kotlinx.coroutines.Dispatchers
@@ -10,6 +12,7 @@ import javax.inject.Singleton
 
 @Singleton
 class PersonRepository @Inject constructor(
+    private val database: AppDatabase,
     private val personDao: PersonDao
 ) {
     fun getPersonsByFile(fileId: Long): Flow<List<Person>> = personDao.getPersonsByFile(fileId)
@@ -19,7 +22,9 @@ class PersonRepository @Inject constructor(
     }
 
     suspend fun insertAtPosition(person: Person, position: Int): Long = withContext(Dispatchers.IO) {
-        personDao.insertPersonAtPosition(person, position)
+        database.withTransaction {
+            personDao.insertPersonAtPosition(person, position)
+        }
     }
 
     suspend fun update(person: Person) = withContext(Dispatchers.IO) {
@@ -27,7 +32,9 @@ class PersonRepository @Inject constructor(
     }
 
     suspend fun updateWithPosition(person: Person, oldSortOrder: Int, newSortOrder: Int) = withContext(Dispatchers.IO) {
-        personDao.updatePersonWithPosition(person, oldSortOrder, newSortOrder)
+        database.withTransaction {
+            personDao.updatePersonWithPosition(person, oldSortOrder, newSortOrder)
+        }
     }
 
     suspend fun softDelete(id: Long) = withContext(Dispatchers.IO) {
@@ -35,7 +42,9 @@ class PersonRepository @Inject constructor(
     }
 
     suspend fun deleteWithShift(id: Long) = withContext(Dispatchers.IO) {
-        personDao.deletePersonWithShift(id)
+        database.withTransaction {
+            personDao.deletePersonWithShift(id)
+        }
     }
 
     fun getDeletedPersons(): Flow<List<Person>> = personDao.getDeletedPersons()

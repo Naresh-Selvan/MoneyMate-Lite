@@ -3,10 +3,13 @@ package com.moneymate.lite.di
 import android.content.Context
 import androidx.room.Room
 import com.moneymate.lite.data.AppDatabase
+import com.moneymate.lite.data.dao.ActivityLogDao
+import com.moneymate.lite.data.dao.ApprovalRequestDao
 import com.moneymate.lite.data.dao.LoanDao
 import com.moneymate.lite.data.dao.LoanFileDao
 import com.moneymate.lite.data.dao.PaymentDao
 import com.moneymate.lite.data.dao.PersonDao
+import com.moneymate.lite.data.dao.WorkerProfileDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -27,7 +30,9 @@ object AppModule {
             context,
             AppDatabase::class.java,
             "moneymate_lite.db"
-        ).build()
+        )
+            .addMigrations(AppDatabase.MIGRATION_1_2)
+            .build()
     }
 
     @Provides
@@ -52,5 +57,23 @@ object AppModule {
     @Singleton
     fun providePaymentDao(database: AppDatabase): PaymentDao {
         return database.paymentDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideApprovalRequestDao(database: AppDatabase): ApprovalRequestDao {
+        return database.approvalRequestDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideActivityLogDao(database: AppDatabase): ActivityLogDao {
+        return database.activityLogDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideWorkerProfileDao(database: AppDatabase): WorkerProfileDao {
+        return database.workerProfileDao()
     }
 }

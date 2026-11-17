@@ -1,46 +1,69 @@
 package com.moneymate.lite.ui.viewmodel
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
-import com.google.firebase.auth.FirebaseAuth
+import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseUser
+import com.moneymate.lite.data.auth.AuthManager
+import com.moneymate.lite.data.model.UserProfile
+import com.moneymate.lite.data.model.UserRole
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
-    @ApplicationContext private val context: Context
+    private val authManager: AuthManager
 ) : ViewModel() {
 
-    private val auth = FirebaseAuth.getInstance()
-    private val prefs = context.getSharedPreferences("moneymate_auth_prefs", Context.MODE_PRIVATE)
+    val currentUser: StateFlow<FirebaseUser?> = authManager.currentUser
+    val isOfflineMode: StateFlow<Boolean> = authManager.isOfflineMode
+    val currentProfile: StateFlow<UserProfile?> = authManager.currentProfile
+    val userRole: StateFlow<UserRole> = authManager.userRole
+    val businessId: StateFlow<String> = authManager.businessId
+    val isPasswordChangeRequired: StateFlow<Boolean> = authManager.isPasswordChangeRequired
+    val authError: StateFlow<String?> = authManager.authError
 
-    private val _currentUser = MutableStateFlow(auth.currentUser)
-    val currentUser: StateFlow<FirebaseUser?> = _currentUser.asStateFlow()
+    fun signInWorker(
+        username: String,
+        password: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val result = authManager.signInWorker(username, password)
+            if (result.isSuccess) {
+                onSuccess()
+            } else {
+                onError(result.exceptionOrNull()?.localizedMessage ?: "Worker login failed")
+            }
+        }
+    }
 
-    private val _isOfflineMode = MutableStateFlow(prefs.getBoolean("key_offline_mode", false))
-    val isOfflineMode: StateFlow<Boolean> = _isOfflineMode.asStateFlow()
-
-    init {
-        auth.addAuthStateListener { firebaseAuth ->
-            _currentUser.value = firebaseAuth.currentUser
-            if (firebaseAuth.currentUser != null) {
-                setOfflineMode(false)
+    fun changePassword(
+        newPassword: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val result = authManager.changePassword(newPassword)
+            if (result.isSuccess) {
+                onSuccess()
+            } else {
+                onError(result.exceptionOrNull()?.localizedMessage ?: "Failed to update password")
             }
         }
     }
 
     fun setOfflineMode(enabled: Boolean) {
-        _isOfflineMode.value = enabled
-        prefs.edit().putBoolean("key_offline_mode", enabled).apply()
+        authManager.setOfflineMode(enabled)
     }
 
     fun signOut() {
-        auth.signOut()
-        setOfflineMode(false)
+        authManager.signOut()
+    }
+
+    fun clearAuthError() {
+        authManager.clearAuthError()
     }
 }

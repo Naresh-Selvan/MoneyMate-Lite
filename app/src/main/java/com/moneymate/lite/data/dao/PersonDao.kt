@@ -16,11 +16,17 @@ interface PersonDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(person: Person): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(persons: List<Person>)
+
     @Update
     suspend fun update(person: Person)
 
-    @Query("UPDATE persons SET isDeleted = 1 WHERE id = :id")
-    suspend fun softDelete(id: Long)
+    @Query("UPDATE persons SET isDeleted = 1, lastModified = :modified WHERE id = :id")
+    suspend fun softDelete(id: Long, modified: Long = System.currentTimeMillis())
+
+    @Query("UPDATE persons SET isDeleted = 1, lastModified = :modified WHERE sharedId = :sharedId")
+    suspend fun softDeleteBySharedId(sharedId: String, modified: Long = System.currentTimeMillis())
 
     @Query("SELECT * FROM persons WHERE fileId = :fileId AND isDeleted = 0 ORDER BY sortOrder")
     suspend fun getActivePersonsList(fileId: Long): List<Person>
@@ -53,7 +59,7 @@ interface PersonDao {
                 shiftSortOrdersUpBetween(person.fileId, newSortOrder, oldSortOrder)
             }
         }
-        update(person.copy(sortOrder = newSortOrder))
+        update(person.copy(sortOrder = newSortOrder, lastModified = System.currentTimeMillis()))
     }
 
     @androidx.room.Transaction
@@ -68,12 +74,27 @@ interface PersonDao {
     @Query("SELECT * FROM persons WHERE isDeleted = 1 ORDER BY createdAt DESC")
     fun getDeletedPersons(): Flow<List<Person>>
 
-    @Query("UPDATE persons SET isDeleted = 0 WHERE id = :id")
-    suspend fun restorePerson(id: Long)
+    @Query("UPDATE persons SET isDeleted = 0, lastModified = :modified WHERE id = :id")
+    suspend fun restorePerson(id: Long, modified: Long = System.currentTimeMillis())
 
     @Query("SELECT * FROM persons WHERE fileId = :fileId AND isDeleted = 1 ORDER BY createdAt DESC")
     fun getDeletedPersonsByFile(fileId: Long): Flow<List<Person>>
 
     @Query("SELECT * FROM persons WHERE id = :id LIMIT 1")
     suspend fun getPersonById(id: Long): Person?
+
+    @Query("SELECT * FROM persons WHERE sharedId = :sharedId LIMIT 1")
+    suspend fun getPersonBySharedId(sharedId: String): Person?
+
+    @Query("SELECT * FROM persons WHERE sharedId = :sharedId LIMIT 1")
+    fun getPersonBySharedIdFlow(sharedId: String): Flow<Person?>
+
+    @Query("SELECT * FROM persons WHERE isDeleted = 0")
+    suspend fun getAllPersonsList(): List<Person>
+
+    @Query("SELECT * FROM persons")
+    suspend fun getAllPersonsIncludingDeleted(): List<Person>
+
+    @Query("DELETE FROM persons")
+    suspend fun clearAll()
 }

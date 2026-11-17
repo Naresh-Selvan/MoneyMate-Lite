@@ -2,7 +2,11 @@ package com.moneymate.lite.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.moneymate.lite.data.auth.AuthManager
+import com.moneymate.lite.data.model.UserRole
+import com.moneymate.lite.data.repository.ActivityLogRepository
 import com.moneymate.lite.data.repository.LoanRepository
+import com.moneymate.lite.data.sync.SyncManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -13,7 +17,10 @@ import javax.inject.Inject
 
 @HiltViewModel
 class PaymentViewModel @Inject constructor(
-    private val loanRepository: LoanRepository
+    private val loanRepository: LoanRepository,
+    private val authManager: AuthManager,
+    private val activityLogRepository: ActivityLogRepository,
+    private val syncManager: SyncManager
 ) : ViewModel() {
 
     private val _todayCollectionTotal = MutableStateFlow(0.0)
@@ -27,7 +34,49 @@ class PaymentViewModel @Inject constructor(
     }
 
     suspend fun recordPayment(loanId: Long, amount: Double, date: Long) {
-        loanRepository.recordPayment(loanId, amount, date)
+        val user = authManager.currentUser.value
+        val role = authManager.userRole.value
+        val bizId = authManager.businessId.value
+        val isOnline = syncManager.isOnline.value
+
+        if (role == UserRole.WORKER && user != null) {
+            val syncStatus = if (isOnline) "SYNCED" else "PENDING_SYNC"
+            loanRepository.recordWorkerPayment(
+                loanId = loanId,
+                amount = amount,
+                date = date,
+                workerId = user.uid,
+                workerName = user.displayName?.ifBlank { "Worker" } ?: "Worker",
+                syncStatus = syncStatus
+            )
+            activityLogRepository.logActivity(
+                businessId = bizId,
+                actorId = user.uid,
+                actorName = user.displayName ?: "Worker",
+                actorRole = UserRole.WORKER,
+                action = "PAYMENT_RECORDED",
+                details = "Recorded payment of ₹$amount ($syncStatus)",
+                outcome = "SUCCESS"
+            )
+            if (isOnline) {
+                syncManager.triggerSync()
+            } else {
+                syncManager.refreshPendingCounts()
+            }
+        } else {
+            loanRepository.recordPayment(loanId, amount, date)
+            if (user != null) {
+                activityLogRepository.logActivity(
+                    businessId = bizId,
+                    actorId = user.uid,
+                    actorName = user.displayName ?: "Owner",
+                    actorRole = UserRole.OWNER,
+                    action = "PAYMENT_RECORDED",
+                    details = "Recorded payment of ₹$amount",
+                    outcome = "SUCCESS"
+                )
+            }
+        }
         refreshTotals()
     }
 

@@ -43,14 +43,26 @@ interface LoanDao {
     @Query("SELECT * FROM loans WHERE id = :id LIMIT 1")
     suspend fun getLoanById(id: Long): Loan?
 
+    @Query("SELECT * FROM loans WHERE sharedId = :sharedId LIMIT 1")
+    suspend fun getLoanBySharedId(sharedId: String): Loan?
+
+    @Query("SELECT * FROM loans WHERE sharedId = :sharedId LIMIT 1")
+    fun getLoanBySharedIdFlow(sharedId: String): Flow<Loan?>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(loan: Loan): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(loans: List<Loan>)
 
     @Update
     suspend fun update(loan: Loan)
 
-    @Query("UPDATE loans SET isCompleted = 1, completedAt = :completedAt WHERE id = :loanId")
-    suspend fun markCompleted(loanId: Long, completedAt: Long)
+    @Query("UPDATE loans SET isCompleted = 1, completedAt = :completedAt, lastModified = :modified WHERE id = :loanId")
+    suspend fun markCompleted(loanId: Long, completedAt: Long, modified: Long = System.currentTimeMillis())
+
+    @Query("UPDATE loans SET isCompleted = 1, completedAt = :completedAt, lastModified = :modified WHERE sharedId = :sharedId")
+    suspend fun markCompletedBySharedId(sharedId: String, completedAt: Long, modified: Long = System.currentTimeMillis())
 
     @Query("""
         SELECT 
@@ -125,11 +137,26 @@ interface LoanDao {
     """)
     fun getBalancesUpToDate(fileId: Long, upToDate: Long): Flow<List<PersonBalanceUpToDate>>
 
-    @Query("UPDATE loans SET isCompleted = 0, completedAt = null WHERE id = :loanId")
-    suspend fun markIncomplete(loanId: Long)
+    @Query("UPDATE loans SET isCompleted = 0, completedAt = null, lastModified = :modified WHERE id = :loanId")
+    suspend fun markIncomplete(loanId: Long, modified: Long = System.currentTimeMillis())
 
-    @Query("UPDATE loans SET isDeleted = 1 WHERE id = :id")
-    suspend fun softDeleteLoan(id: Long)
+    @Query("UPDATE loans SET isDeleted = 1, lastModified = :modified WHERE id = :id")
+    suspend fun softDeleteLoan(id: Long, modified: Long = System.currentTimeMillis())
+
+    @Query("UPDATE loans SET isDeleted = 1, lastModified = :modified WHERE sharedId = :sharedId")
+    suspend fun softDeleteLoanBySharedId(sharedId: String, modified: Long = System.currentTimeMillis())
+
+    @Query("UPDATE loans SET isDeleted = 1, lastModified = :modified WHERE personId = :personId")
+    suspend fun softDeleteLoansForPerson(personId: Long, modified: Long = System.currentTimeMillis())
+
+    @Query("SELECT * FROM loans WHERE isDeleted = 0")
+    suspend fun getAllLoansList(): List<Loan>
+
+    @Query("SELECT * FROM loans")
+    suspend fun getAllLoansIncludingDeleted(): List<Loan>
+
+    @Query("DELETE FROM loans")
+    suspend fun clearAll()
 }
 
 data class DateTransactionEntity(
@@ -144,4 +171,3 @@ data class PersonBalanceUpToDate(
     val personId: Long,
     val balance: Double
 )
-

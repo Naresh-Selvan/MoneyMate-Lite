@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 25,
-  "latestVersionName": "1.0.25",
+  "latestVersionCode": 26,
+  "latestVersionName": "1.0.26",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Fix page navigation to step back one page at a time, reset scroll to top on page change, and add smooth swipe navigation."
+  "changelog": "Worker accounts, shared syncing, owner approvals, and activity history."
 }

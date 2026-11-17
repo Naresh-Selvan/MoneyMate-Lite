@@ -1,0 +1,152 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isBusinessOwner(bizId) {
+      return isAuthenticated() &&
+        getUserData().businessId == bizId &&
+        getUserData().role == 'OWNER';
+    }
+
+    function isBusinessMember(bizId) {
+      return isAuthenticated() &&
+        getUserData().businessId == bizId &&
+        getUserData().isActive == true;
+    }
+
+    function isWorkerWithFileAccess(bizId, fileSharedId) {
+      return isBusinessMember(bizId) && (
+        getUserData().role == 'OWNER' ||
+        getUserData().accessAllFiles == true ||
+        fileSharedId in getUserData().allowedFileIds
+      );
+    }
+
+    // User profiles
+    match /users/{userId} {
+      // Users can read own profile; Owner can read worker profiles in their business
+      allow read: if isAuthenticated() && (
+        request.auth.uid == userId ||
+        (getUserData().role == 'OWNER' && resource.data.businessId == getUserData().businessId)
+      );
+
+      // Owner can provision and manage workers; User can update non-privilege flags (e.g., mustChangePassword)
+      allow create: if isAuthenticated() && (
+        request.auth.uid == userId ||
+        getUserData().role == 'OWNER'
+      );
+
+      allow update: if isAuthenticated() && (
+        getUserData().role == 'OWNER' ||
+        (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'businessId', 'accessAllFiles', 'allowedFileIds', 'isActive']))
+      );
+
+      allow delete: if isAuthenticated() && getUserData().role == 'OWNER';
+    }
+
+    // Username lookup collection for worker provisioning and authentication
+    match /usernames/{username} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && getUserData().role == 'OWNER';
+    }
+
+    // Business Root Documents
+    match /businesses/{businessId} {
+      allow read: if isBusinessMember(businessId);
+      allow write: if isBusinessOwner(businessId);
+
+      // Files Collection
+      match /files/{fileId} {
+        allow read: if isBusinessMember(businessId) && (
+          getUserData().role == 'OWNER' ||
+          getUserData().accessAllFiles == true ||
+          fileId in getUserData().allowedFileIds
+        );
+        // Only owner can create, rename, or delete files
+        allow write: if isBusinessOwner(businessId);
+      }
+
+      // Customers Collection
+      match /customers/{customerId} {
+        allow read: if isBusinessMember(businessId) &&
+          isWorkerWithFileAccess(businessId, resource.data.fileSharedId);
+        // Only owner can directly create, edit, or delete customers (workers submit approval requests)
+        allow write: if isBusinessOwner(businessId);
+      }
+
+      // Loans Collection
+      match /loans/{loanId} {
+        allow read: if isBusinessMember(businessId);
+        // Only owner can directly create, edit, or delete loans (workers submit approval requests)
+        allow write: if isBusinessOwner(businessId);
+      }
+
+      // Payments Collection
+      match /payments/{paymentId} {
+        allow read: if isBusinessMember(businessId);
+
+        // Owner can do anything.
+        // Workers can directly create official payments if authenticated and active
+        allow create: if isBusinessOwner(businessId) || (
+          isBusinessMember(businessId) &&
+          request.resource.data.recordedByWorkerId == request.auth.uid &&
+          request.resource.data.amount > 0
+        );
+
+        // Only owner can directly edit or delete payments (workers submit approval requests)
+        allow update, delete: if isBusinessOwner(businessId);
+      }
+
+      // Approval Requests Collection
+      match /approval_requests/{requestId} {
+        // Owner can read all. Workers can read requests they submitted.
+        allow read: if isBusinessMember(businessId) && (
+          getUserData().role == 'OWNER' ||
+          resource.data.workerId == request.auth.uid
+        );
+
+        // Workers can create new pending proposals
+        allow create: if isBusinessMember(businessId) &&
+          request.resource.data.workerId == request.auth.uid &&
+          request.resource.data.status == 'PENDING';
+
+        // Owner can approve/reject. Worker can withdraw their own pending request.
+        allow update: if isBusinessOwner(businessId) || (
+          isBusinessMember(businessId) &&
+          resource.data.workerId == request.auth.uid &&
+          request.resource.data.status == 'WITHDRAWN' &&
+          resource.data.status == 'PENDING'
+        );
+
+        allow delete: if isBusinessOwner(businessId);
+      }
+
+      // Activity History Collection (Append-only & Tamper-proof)
+      match /activity_logs/{logId} {
+        // Only Owner can read the audit trail
+        allow read: if isBusinessOwner(businessId);
+
+        // Members can append logs (actorId must match authenticated user)
+        allow create: if isBusinessMember(businessId) &&
+          request.resource.data.actorId == request.auth.uid;
+
+        // Strictly IMMUTABLE: no updates or deletions allowed to ensure audit integrity
+        allow update, delete: if false;
+      }
+
+      // Backups Collection (Owner only)
+      match /backups/{backupId} {
+        allow read, write: if isBusinessOwner(businessId);
+      }
+    }
+  }
+}

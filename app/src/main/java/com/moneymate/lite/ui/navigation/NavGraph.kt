@@ -26,6 +26,10 @@ import com.moneymate.lite.ui.screens.SettingsScreen
 import com.moneymate.lite.ui.screens.RecentlyDeletedScreen
 import com.moneymate.lite.ui.screens.FileTrashScreen
 import com.moneymate.lite.ui.screens.UpdateDialog
+import com.moneymate.lite.ui.screens.ManageWorkersScreen
+import com.moneymate.lite.ui.screens.PendingApprovalsScreen
+import com.moneymate.lite.ui.screens.MyRequestsScreen
+import com.moneymate.lite.ui.screens.ActivityHistoryScreen
 import com.moneymate.lite.ui.viewmodel.AuthViewModel
 import com.moneymate.lite.ui.viewmodel.UpdateViewModel
 import com.moneymate.lite.ui.viewmodel.AppUpdateInfo
@@ -74,6 +78,22 @@ fun NavGraph(navController: NavHostController) {
             startDestination = startDestination,
             modifier = Modifier.padding(paddingValues)
         ) {
+            composable("manage_workers") {
+                ManageWorkersScreen(navController = navController)
+            }
+
+            composable("pending_approvals") {
+                PendingApprovalsScreen(navController = navController)
+            }
+
+            composable("my_requests") {
+                MyRequestsScreen(navController = navController)
+            }
+
+            composable("activity_history") {
+                ActivityHistoryScreen(navController = navController)
+            }
+
             composable("login") {
                 LoginScreen(navController = navController)
             }
