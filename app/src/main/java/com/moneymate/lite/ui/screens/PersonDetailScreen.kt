@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.moneymate.lite.data.entity.Loan
+import com.moneymate.lite.data.entity.LoanFile
 import com.moneymate.lite.data.entity.Payment
 import com.moneymate.lite.data.entity.Person
 import com.moneymate.lite.ui.viewmodel.LoanViewModel
@@ -83,6 +84,7 @@ fun PersonDetailScreen(
     val dateFormat = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
 
     var person by remember { mutableStateOf<Person?>(null) }
+    var loanFile by remember { mutableStateOf<LoanFile?>(null) }
     var showNewLoanDialog by remember { mutableStateOf(false) }
     var showRecordPaymentDialog by remember { mutableStateOf(false) }
     var expandedLoanId by remember { mutableStateOf<Long?>(null) }
@@ -95,9 +97,13 @@ fun PersonDetailScreen(
         mutableStateOf<Pair<Long, Pair<Double, Long>>?>(null) // personId, (amount, date)
     }
 
-    // Fetch person data once
+    // Fetch person data and associated file
     LaunchedEffect(personId) {
-        person = personViewModel.getPersonById(personId)
+        val p = personViewModel.getPersonById(personId)
+        person = p
+        if (p != null) {
+            loanFile = personViewModel.getFileById(p.fileId)
+        }
     }
 
     // Payments for active loan — keyed on the loan ID, not the entire Loan object,
@@ -301,15 +307,18 @@ fun PersonDetailScreen(
         val oldAmount = proposal.second
         val newAmount = proposal.third.first
         val newDate = proposal.third.second
+        val resolvedFileName = loanFile?.name ?: "File"
+        val resolvedFileSharedId = loanFile?.sharedId ?: (person?.fileSharedId ?: "file_${person?.fileId ?: 0}")
+
         SubmitProposalDialog(
             title = "Request Payment Edit",
-            summaryText = "Customer: ${person?.name ?: "Customer"}\nChange payment: ₹${"%.0f".format(oldAmount)} ➔ ₹${"%.0f".format(newAmount)}",
+            summaryText = "Customer: ${person?.name ?: "Customer"}\nFile: $resolvedFileName\nChange payment: ₹${"%.0f".format(oldAmount)} ➔ ₹${"%.0f".format(newAmount)}",
             onDismiss = { pendingPaymentProposal = null },
             onSubmit = { reason ->
                 scope.launch {
                     val res = loanViewModel.submitPaymentEditProposal(
-                        fileSharedId = person?.fileSharedId ?: "file_${person?.fileId ?: 0}",
-                        fileName = person?.name ?: "Customer",
+                        fileSharedId = resolvedFileSharedId,
+                        fileName = resolvedFileName,
                         paymentId = paymentId,
                         customerName = person?.name ?: "Customer",
                         oldAmount = oldAmount,
@@ -333,15 +342,18 @@ fun PersonDetailScreen(
         val pId = proposal.first
         val amount = proposal.second.first
         val date = proposal.second.second
+        val resolvedFileName = loanFile?.name ?: "File"
+        val resolvedFileSharedId = loanFile?.sharedId ?: (person?.fileSharedId ?: "file_${person?.fileId ?: 0}")
+
         SubmitProposalDialog(
             title = "Request New Loan Approval",
-            summaryText = "Customer: ${person?.name ?: "Customer"}\nNew Loan Amount: ₹${"%.0f".format(amount)}",
+            summaryText = "Customer: ${person?.name ?: "Customer"}\nFile: $resolvedFileName\nNew Loan Amount: ₹${"%.0f".format(amount)}",
             onDismiss = { pendingNewLoanProposal = null },
             onSubmit = { reason ->
                 scope.launch {
                     val res = loanViewModel.submitNewLoanProposal(
-                        fileSharedId = person?.fileSharedId ?: "file_${person?.fileId ?: 0}",
-                        fileName = person?.name ?: "Customer",
+                        fileSharedId = resolvedFileSharedId,
+                        fileName = resolvedFileName,
                         personId = pId,
                         customerName = person?.name ?: "Customer",
                         amount = amount,

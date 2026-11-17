@@ -18,6 +18,7 @@ import com.moneymate.lite.data.model.PendingActionType
 import com.moneymate.lite.data.model.UserRole
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -35,14 +36,56 @@ class ApprovalRepository @Inject constructor(
     private val paymentDao: PaymentDao,
     private val activityLogRepository: ActivityLogRepository
 ) {
-    fun getPendingRequestsFlow(businessId: String): Flow<List<ApprovalRequestEntity>> =
-        approvalRequestDao.getPendingRequestsFlow(businessId)
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.IO)
+    private var listenerRegistration: com.google.firebase.firestore.ListenerRegistration? = null
+    private var listeningBusinessId: String? = null
 
-    fun getPendingRequestsCountFlow(businessId: String): Flow<Int> =
-        approvalRequestDao.getPendingRequestsCountFlow(businessId)
+    fun listenToApprovalRequests(businessId: String) {
+        if (businessId.isBlank() || businessId == listeningBusinessId) return
+        listeningBusinessId = businessId
+        listenerRegistration?.remove()
 
-    fun getRequestsByWorkerFlow(businessId: String, workerId: String): Flow<List<ApprovalRequestEntity>> =
-        approvalRequestDao.getRequestsByWorkerFlow(businessId, workerId)
+        try {
+            val db = FirebaseFirestore.getInstance()
+            listenerRegistration = db.collection("businesses").document(businessId)
+                .collection("approval_requests")
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null || snapshot == null) return@addSnapshotListener
+                    scope.launch {
+                        for (change in snapshot.documentChanges) {
+                            val doc = change.document
+                            val entity = ApprovalRequestEntity.fromDocument(doc, businessId)
+                            when (change.type) {
+                                com.google.firebase.firestore.DocumentChange.Type.ADDED,
+                                com.google.firebase.firestore.DocumentChange.Type.MODIFIED -> {
+                                    approvalRequestDao.insert(entity)
+                                }
+                                com.google.firebase.firestore.DocumentChange.Type.REMOVED -> {
+                                    approvalRequestDao.delete(entity.id)
+                                }
+                            }
+                        }
+                    }
+                }
+        } catch (e: Exception) {
+            // Offline or firestore error
+        }
+    }
+
+    fun getPendingRequestsFlow(businessId: String): Flow<List<ApprovalRequestEntity>> {
+        listenToApprovalRequests(businessId)
+        return approvalRequestDao.getPendingRequestsFlow(businessId)
+    }
+
+    fun getPendingRequestsCountFlow(businessId: String): Flow<Int> {
+        listenToApprovalRequests(businessId)
+        return approvalRequestDao.getPendingRequestsCountFlow(businessId)
+    }
+
+    fun getRequestsByWorkerFlow(businessId: String, workerId: String): Flow<List<ApprovalRequestEntity>> {
+        listenToApprovalRequests(businessId)
+        return approvalRequestDao.getRequestsByWorkerFlow(businessId, workerId)
+    }
 
     fun getPendingRequestsForRecordFlow(businessId: String, recordSharedId: String): Flow<List<ApprovalRequestEntity>> =
         approvalRequestDao.getPendingRequestsForRecordFlow(businessId, recordSharedId)
@@ -300,6 +343,13 @@ class ApprovalRepository @Inject constructor(
             }
 
             val now = System.currentTimeMillis()
+            var createdPerson: Person? = null
+            var createdLoan: Loan? = null
+            var updatedLoan: Loan? = null
+            var updatedPerson: Person? = null
+            var updatedPayment: Payment? = null
+            var deletedCollection: String? = null
+            var deletedDocSharedId: String? = null
 
             // Atomically apply the official change in Room
             database.withTransaction {
@@ -328,6 +378,7 @@ class ApprovalRepository @Inject constructor(
                             lastModified = now
                         )
                         val personId = personDao.insert(person)
+                        createdPerson = person
 
                         if (initialLoanAmount > 0.0) {
                             val loan = Loan(
@@ -341,6 +392,7 @@ class ApprovalRepository @Inject constructor(
                                 lastModified = now
                             )
                             loanDao.insert(loan)
+                            createdLoan = loan
                         }
                     }
 
@@ -362,6 +414,7 @@ class ApprovalRepository @Inject constructor(
                             lastModified = now
                         )
                         loanDao.insert(loan)
+                        createdLoan = loan
                     }
 
                     PendingActionType.INCREASE_LOAN.name -> {
@@ -377,6 +430,7 @@ class ApprovalRepository @Inject constructor(
                             completedAt = null
                         )
                         loanDao.update(updated)
+                        updatedLoan = updated
                     }
 
                     PendingActionType.EDIT_CUSTOMER.name -> {
@@ -390,6 +444,7 @@ class ApprovalRepository @Inject constructor(
                             lastModified = now
                         )
                         personDao.update(updated)
+                        updatedPerson = updated
                     }
 
                     PendingActionType.EDIT_LOAN.name -> {
@@ -409,6 +464,7 @@ class ApprovalRepository @Inject constructor(
                             lastModified = now
                         )
                         loanDao.update(updated)
+                        updatedLoan = updated
                     }
 
                     PendingActionType.EDIT_PAYMENT.name -> {
@@ -418,20 +474,23 @@ class ApprovalRepository @Inject constructor(
                         val newDate = payload.optLong("date", payment.date)
                         if (newAmount <= 0.0) throw IllegalArgumentException("Amount must be positive")
 
-                        val updatedPayment = payment.copy(
+                        val updatedP = payment.copy(
                             amount = newAmount,
                             date = newDate,
                             lastModified = now
                         )
-                        paymentDao.update(updatedPayment)
+                        paymentDao.update(updatedP)
+                        updatedPayment = updatedP
 
                         val loan = loanDao.getLoanById(payment.loanId)
                         if (loan != null) {
                             val totalPaid = paymentDao.getTotalPaidForLoan(loan.id)
                             if (totalPaid >= loan.totalAmount && !loan.isCompleted) {
                                 loanDao.markCompleted(loan.id, now)
+                                updatedLoan = loan.copy(isCompleted = true, completedAt = now, lastModified = now)
                             } else if (totalPaid < loan.totalAmount && loan.isCompleted) {
                                 loanDao.markIncomplete(loan.id)
+                                updatedLoan = loan.copy(isCompleted = false, completedAt = null, lastModified = now)
                             }
                         }
                     }
@@ -441,6 +500,8 @@ class ApprovalRepository @Inject constructor(
                             ?: throw IllegalStateException("Customer not found")
                         personDao.softDelete(person.id)
                         loanDao.softDeleteLoansForPerson(person.id)
+                        deletedCollection = "persons"
+                        deletedDocSharedId = person.sharedId
                     }
 
                     PendingActionType.DELETE_LOAN.name -> {
@@ -448,17 +509,22 @@ class ApprovalRepository @Inject constructor(
                             ?: throw IllegalStateException("Loan not found")
                         loanDao.softDeleteLoan(loan.id)
                         paymentDao.softDeletePaymentsForLoan(loan.id)
+                        deletedCollection = "loans"
+                        deletedDocSharedId = loan.sharedId
                     }
 
                     PendingActionType.DELETE_PAYMENT.name -> {
                         val payment = paymentDao.getPaymentBySharedId(request.recordSharedId ?: "")
                             ?: throw IllegalStateException("Payment not found")
                         paymentDao.softDelete(payment.id)
+                        deletedCollection = "payments"
+                        deletedDocSharedId = payment.sharedId
                         val loan = loanDao.getLoanById(payment.loanId)
                         if (loan != null && loan.isCompleted) {
                             val totalPaid = paymentDao.getTotalPaidForLoan(loan.id)
                             if (totalPaid < loan.totalAmount) {
                                 loanDao.markIncomplete(loan.id)
+                                updatedLoan = loan.copy(isCompleted = false, completedAt = null, lastModified = now)
                             }
                         }
                     }
@@ -467,6 +533,8 @@ class ApprovalRepository @Inject constructor(
                         val file = loanFileDao.getFileBySharedId(request.fileSharedId)
                             ?: throw IllegalStateException("File not found")
                         loanFileDao.softDelete(file.id)
+                        deletedCollection = "files"
+                        deletedDocSharedId = file.sharedId
                     }
                 }
 
@@ -479,18 +547,37 @@ class ApprovalRepository @Inject constructor(
                 approvalRequestDao.update(approvedRequest)
             }
 
-            // Sync updated approval request to Firestore
+            // Sync updated approval request and approved record mutations to Firestore
             if (FirebaseAuth.getInstance().currentUser != null && request.businessId.isNotBlank()) {
                 val db = FirebaseFirestore.getInstance()
-                db.collection("businesses").document(request.businessId)
-                    .collection("approval_requests").document(request.id)
-                    .update(
-                        mapOf(
-                            "status" to ApprovalStatus.APPROVED.name,
-                            "reviewedBy" to reviewerId,
-                            "reviewedAt" to now
-                        )
-                    ).await()
+                val bizRef = db.collection("businesses").document(request.businessId)
+
+                try {
+                    bizRef.collection("approval_requests").document(request.id)
+                        .update(
+                            mapOf(
+                                "status" to ApprovalStatus.APPROVED.name,
+                                "reviewedBy" to reviewerId,
+                                "reviewedAt" to now
+                            )
+                        ).await()
+                } catch (e: Exception) {
+                    // Local state updated
+                }
+
+                try {
+                    createdPerson?.let { bizRef.collection("persons").document(it.sharedId).set(it).await() }
+                    createdLoan?.let { bizRef.collection("loans").document(it.sharedId).set(it).await() }
+                    updatedLoan?.let { bizRef.collection("loans").document(it.sharedId).set(it).await() }
+                    updatedPerson?.let { bizRef.collection("persons").document(it.sharedId).set(it).await() }
+                    updatedPayment?.let { bizRef.collection("payments").document(it.sharedId).set(it).await() }
+                    if (deletedCollection != null && deletedDocSharedId != null) {
+                        bizRef.collection(deletedCollection!!).document(deletedDocSharedId!!)
+                            .update(mapOf("isDeleted" to true, "lastModified" to now)).await()
+                    }
+                } catch (e: Exception) {
+                    // Sync failure - will be retried on next sync
+                }
             }
 
             activityLogRepository.logActivity(

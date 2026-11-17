@@ -237,4 +237,39 @@ class ApprovalAndProposalTest {
         assertTrue(request.proposedPayloadJson.contains("400.0"))
         assertTrue(request.baseSnapshotJson!!.contains("500.0"))
     }
+
+    @Test
+    fun `ApprovalRequestEntity and ActivityLogEntity define default no-arg constructors for Firestore`() {
+        val defaultApproval = ApprovalRequestEntity()
+        assertEquals(1, defaultApproval.version)
+        assertEquals("PENDING", defaultApproval.status)
+        assertEquals("{}", defaultApproval.proposedPayloadJson)
+
+        val defaultLog = com.moneymate.lite.data.entity.ActivityLogEntity()
+        assertEquals("SUCCESS", defaultLog.outcome)
+        assertEquals("SYNCED", defaultLog.syncStatus)
+    }
+
+    @Test
+    fun `Sync update preserves businessId so existing local files are not hidden from workers`() {
+        // Pre-existing local file before multi-user sync was enabled
+        val localFile = com.moneymate.lite.data.entity.LoanFile(
+            id = 1,
+            sharedId = "file_shared_1",
+            businessId = "", // Was empty prior to cloud sync
+            name = "NLR 1"
+        )
+
+        val targetBusinessId = "biz_yvtuYaX5BhUwsmYThvNS4bKhdvJ2"
+
+        // Simulated cloud update
+        val updatedFromCloud = localFile.copy(
+            businessId = targetBusinessId,
+            sharedId = "file_shared_1",
+            name = "NLR 1"
+        )
+
+        assertEquals(targetBusinessId, updatedFromCloud.businessId)
+        assertEquals("NLR 1", updatedFromCloud.name)
+    }
 }

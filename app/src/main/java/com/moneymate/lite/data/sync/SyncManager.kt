@@ -8,12 +8,18 @@ import android.net.NetworkRequest
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.moneymate.lite.data.dao.ActivityLogDao
+import com.moneymate.lite.data.dao.ApprovalRequestDao
 import com.moneymate.lite.data.dao.LoanDao
 import com.moneymate.lite.data.dao.LoanFileDao
 import com.moneymate.lite.data.dao.PaymentDao
 import com.moneymate.lite.data.dao.PersonDao
+import com.moneymate.lite.data.entity.ActivityLogEntity
+import com.moneymate.lite.data.entity.ApprovalRequestEntity
 import com.moneymate.lite.data.entity.Loan
+import com.moneymate.lite.data.entity.LoanFile
 import com.moneymate.lite.data.entity.Payment
+import com.moneymate.lite.data.entity.Person
 import com.moneymate.lite.data.model.UserRole
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -34,7 +40,9 @@ class SyncManager @Inject constructor(
     private val paymentDao: PaymentDao,
     private val loanDao: LoanDao,
     private val loanFileDao: LoanFileDao,
-    private val personDao: PersonDao
+    private val personDao: PersonDao,
+    private val approvalRequestDao: ApprovalRequestDao,
+    private val activityLogDao: ActivityLogDao
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val connectivityManager =
@@ -231,8 +239,9 @@ class SyncManager @Inject constructor(
             if (userRole == UserRole.WORKER && !accessAll && fileSharedId !in allowedFileIds) {
                 continue
             }
-            val existing = loanFileDao.getFileBySharedId(fileSharedId)
             val name = fileDoc.getString("name") ?: ""
+            val existing = loanFileDao.getFileBySharedId(fileSharedId)
+                ?: loanFileDao.getAllFilesIncludingDeleted().firstOrNull { it.name.trim().equals(name.trim(), ignoreCase = true) }
             val sortOrder = fileDoc.getLong("sortOrder")?.toInt() ?: 0
             val isDeleted = fileDoc.getBoolean("isDeleted") ?: false
             val createdAt = fileDoc.getLong("createdAt") ?: System.currentTimeMillis()
@@ -240,7 +249,7 @@ class SyncManager @Inject constructor(
 
             if (existing == null) {
                 loanFileDao.insert(
-                    com.moneymate.lite.data.entity.LoanFile(
+                    LoanFile(
                         sharedId = fileSharedId,
                         businessId = businessId,
                         name = name,
@@ -251,13 +260,15 @@ class SyncManager @Inject constructor(
                         syncStatus = "SYNCED"
                     )
                 )
-            } else if (lastModified > existing.lastModified) {
+            } else {
                 loanFileDao.update(
                     existing.copy(
+                        sharedId = fileSharedId,
+                        businessId = businessId,
                         name = name,
                         sortOrder = sortOrder,
                         isDeleted = isDeleted,
-                        lastModified = lastModified,
+                        lastModified = maxOf(lastModified, existing.lastModified),
                         syncStatus = "SYNCED"
                     )
                 )
@@ -283,8 +294,9 @@ class SyncManager @Inject constructor(
             val localFile = localFiles[fileSharedId]
             val localFileId = localFile?.id ?: pDoc.getLong("fileId") ?: 0L
 
-            val existing = personDao.getPersonBySharedId(pSharedId)
             val name = pDoc.getString("name") ?: ""
+            val existing = personDao.getPersonBySharedId(pSharedId)
+                ?: if (localFileId > 0) personDao.getAllPersonsIncludingDeleted().firstOrNull { it.fileId == localFileId && it.name.trim().equals(name.trim(), ignoreCase = true) } else null
             val mobile = pDoc.getString("mobileNumber")
             val place = pDoc.getString("place")
             val notes = pDoc.getString("notes")
@@ -295,7 +307,7 @@ class SyncManager @Inject constructor(
 
             if (existing == null) {
                 personDao.insert(
-                    com.moneymate.lite.data.entity.Person(
+                    Person(
                         sharedId = pSharedId,
                         businessId = businessId,
                         fileId = localFileId,
@@ -310,18 +322,20 @@ class SyncManager @Inject constructor(
                         isDeleted = isDeleted
                     )
                 )
-            } else if (lastModified > existing.lastModified) {
+            } else {
                 personDao.update(
                     existing.copy(
+                        sharedId = pSharedId,
+                        businessId = businessId,
+                        fileId = localFileId,
+                        fileSharedId = fileSharedId,
                         name = name,
                         mobileNumber = mobile,
                         place = place,
                         notes = notes,
                         sortOrder = sortOrder,
-                        fileId = localFileId,
-                        fileSharedId = fileSharedId,
                         isDeleted = isDeleted,
-                        lastModified = lastModified
+                        lastModified = maxOf(lastModified, existing.lastModified)
                     )
                 )
             }
@@ -342,6 +356,7 @@ class SyncManager @Inject constructor(
             val localPersonId = localPerson?.id ?: lDoc.getLong("personId") ?: 0L
 
             val existing = loanDao.getLoanBySharedId(lSharedId)
+                ?: if (localPersonId > 0) loanDao.getAllLoansIncludingDeleted().firstOrNull { it.personId == localPersonId } else null
             val totalAmount = lDoc.getDouble("totalAmount") ?: 0.0
             val dateGiven = lDoc.getLong("dateGiven") ?: System.currentTimeMillis()
             val isCompleted = lDoc.getBoolean("isCompleted") ?: false
@@ -352,7 +367,7 @@ class SyncManager @Inject constructor(
 
             if (existing == null) {
                 loanDao.insert(
-                    com.moneymate.lite.data.entity.Loan(
+                    Loan(
                         sharedId = lSharedId,
                         businessId = businessId,
                         personId = localPersonId,
@@ -367,17 +382,19 @@ class SyncManager @Inject constructor(
                         syncStatus = "SYNCED"
                     )
                 )
-            } else if (lastModified > existing.lastModified) {
+            } else {
                 loanDao.update(
                     existing.copy(
+                        sharedId = lSharedId,
+                        businessId = businessId,
+                        personId = localPersonId,
+                        personSharedId = personSharedId,
                         totalAmount = totalAmount,
                         dateGiven = dateGiven,
                         isCompleted = isCompleted,
                         completedAt = completedAt,
-                        personId = localPersonId,
-                        personSharedId = personSharedId,
                         isDeleted = isDeleted,
-                        lastModified = lastModified,
+                        lastModified = maxOf(lastModified, existing.lastModified),
                         syncStatus = "SYNCED"
                     )
                 )
@@ -409,7 +426,7 @@ class SyncManager @Inject constructor(
 
             if (existing == null) {
                 paymentDao.insert(
-                    com.moneymate.lite.data.entity.Payment(
+                    Payment(
                         sharedId = paySharedId,
                         businessId = businessId,
                         loanId = localLoanId,
@@ -424,20 +441,49 @@ class SyncManager @Inject constructor(
                         syncStatus = "SYNCED"
                     )
                 )
-            } else if (lastModified > existing.lastModified) {
+            } else {
                 paymentDao.update(
                     existing.copy(
-                        amount = amount,
-                        date = date,
+                        sharedId = paySharedId,
+                        businessId = businessId,
                         loanId = localLoanId,
                         loanSharedId = loanSharedId,
+                        amount = amount,
+                        date = date,
                         recordedByWorkerId = recordedByWorkerId,
                         recordedByWorkerName = recordedByWorkerName,
                         isDeleted = isDeleted,
-                        lastModified = lastModified,
+                        lastModified = maxOf(lastModified, existing.lastModified),
                         syncStatus = "SYNCED"
                     )
                 )
+            }
+        }
+
+        // 5. Pull approval requests
+        try {
+            val approvalsSnapshot = bizRef.collection("approval_requests").get().await()
+            for (aDoc in approvalsSnapshot.documents) {
+                val req = ApprovalRequestEntity.fromDocument(aDoc, businessId)
+                approvalRequestDao.insert(req)
+            }
+        } catch (e: Exception) {
+            // Handled
+        }
+
+        // 6. Pull activity logs (Owner only)
+        if (userRole == UserRole.OWNER) {
+            try {
+                val logsSnapshot = bizRef.collection("activity_logs")
+                    .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                    .limit(100)
+                    .get().await()
+                for (lDoc in logsSnapshot.documents) {
+                    val log = ActivityLogEntity.fromDocument(lDoc, businessId)
+                    activityLogDao.insert(log)
+                }
+            } catch (e: Exception) {
+                // Handled
             }
         }
     }

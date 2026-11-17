@@ -140,11 +140,8 @@ service cloud.firestore {
 
       // Approval Requests Collection
       match /approval_requests/{requestId} {
-        // Owner can read all. Workers can read requests they submitted.
-        allow read: if isBusinessMember(businessId) && (
-          isBusinessOwner(businessId) ||
-          resource.data.workerId == request.auth.uid
-        );
+        // Any member of the business can read approval requests within the business
+        allow read: if isBusinessMember(businessId);
 
         // Workers can create new pending proposals
         allow create: if isBusinessMember(businessId) &&

@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 34,
-  "latestVersionName": "1.0.34",
+  "latestVersionCode": 35,
+  "latestVersionName": "1.0.35",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "PDF collection sheet format update: removed date and heading, removed rupee symbol, reduced amount column width, and increased handwriting box space."
+  "changelog": "Fix real-time multi-device sync for pending approvals and activity history, resolve correct file names on proposals, and fix existing local file sync visibility."
 }

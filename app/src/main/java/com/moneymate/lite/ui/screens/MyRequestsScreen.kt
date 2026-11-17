@@ -241,6 +241,49 @@ private fun WorkerRequestCard(
                 }
             }
 
+            val payloadJson = remember(request.proposedPayloadJson) {
+                try { org.json.JSONObject(request.proposedPayloadJson) } catch (e: Exception) { null }
+            }
+            val baseJson = remember(request.baseSnapshotJson) {
+                try { request.baseSnapshotJson?.let { org.json.JSONObject(it) } } catch (e: Exception) { null }
+            }
+            val customerName = payloadJson?.optString("customerName")?.takeIf { it.isNotBlank() }
+                ?: baseJson?.optString("customerName")?.takeIf { it.isNotBlank() }
+
+            if (!customerName.isNullOrBlank()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Customer: ",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = customerName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+
+            val oldAmt = baseJson?.optDouble("amount") ?: payloadJson?.optDouble("oldAmount")
+            val newAmt = payloadJson?.optDouble("amount")
+            if (newAmt != null && oldAmt != null && oldAmt > 0 && oldAmt != newAmt) {
+                Text(
+                    text = "Amount: ₹${"%.0f".format(oldAmt)} ➔ ₹${"%.0f".format(newAmt)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            } else if (newAmt != null && newAmt > 0) {
+                Text(
+                    text = "Proposed Amount: ₹${"%.0f".format(newAmt)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
             Text(
                 text = "File: ${request.fileName} • ${request.recordType}",
                 style = MaterialTheme.typography.bodySmall,
