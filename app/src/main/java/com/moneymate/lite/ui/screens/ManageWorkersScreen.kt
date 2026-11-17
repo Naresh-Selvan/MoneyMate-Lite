@@ -430,10 +430,6 @@ private fun WorkerCard(
         }
     }
 }
-            }
-        }
-    }
-}
 
 @Composable
 private fun AddWorkerDialog(
