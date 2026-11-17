@@ -332,4 +332,18 @@ class AuthManager @Inject constructor(
     fun clearAuthError() {
         _authError.value = null
     }
+
+    fun getEffectiveUserName(): String {
+        val p = _currentProfile.value
+        val disp = p?.displayName?.trim().orEmpty()
+        val uname = p?.username?.trim().orEmpty()
+        if (disp.isNotEmpty() && uname.isNotEmpty() && !disp.equals(uname, ignoreCase = true)) {
+            return "$disp (@$uname)"
+        }
+        if (disp.isNotEmpty()) return disp
+        if (uname.isNotEmpty()) return uname
+        val fbName = _currentUser.value?.displayName?.trim().orEmpty()
+        if (fbName.isNotEmpty()) return fbName
+        return if (_userRole.value == UserRole.OWNER) "Owner" else "Worker"
+    }
 }

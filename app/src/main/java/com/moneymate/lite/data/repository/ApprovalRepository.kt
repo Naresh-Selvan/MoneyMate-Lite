@@ -51,6 +51,39 @@ class ApprovalRepository @Inject constructor(
         approvalRequestDao.getRequestById(id)
     }
 
+    suspend fun getPersonSharedId(personId: Long): String? = withContext(Dispatchers.IO) {
+        personDao.getPersonById(personId)?.sharedId
+    }
+
+    suspend fun resolveCustomerNameForRecord(recordType: String, recordSharedId: String?): String? = withContext(Dispatchers.IO) {
+        if (recordSharedId.isNullOrBlank()) return@withContext null
+        try {
+            when (recordType.uppercase()) {
+                "CUSTOMER", "PERSON" -> {
+                    val p = personDao.getPersonBySharedId(recordSharedId)
+                        ?: recordSharedId.toLongOrNull()?.let { personDao.getPersonById(it) }
+                    p?.name
+                }
+                "LOAN" -> {
+                    val l = loanDao.getLoanBySharedId(recordSharedId)
+                        ?: recordSharedId.removePrefix("loan_").toLongOrNull()?.let { loanDao.getLoanById(it) }
+                    l?.let { personDao.getPersonById(it.personId)?.name }
+                }
+                "PAYMENT" -> {
+                    val p = paymentDao.getPaymentBySharedId(recordSharedId)
+                        ?: recordSharedId.removePrefix("payment_").toLongOrNull()?.let { paymentDao.getPaymentById(it) }
+                    if (p != null) {
+                        val l = loanDao.getLoanById(p.loanId)
+                        l?.let { personDao.getPersonById(it.personId)?.name }
+                    } else null
+                }
+                else -> null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     suspend fun submitProposal(
         businessId: String,
         workerId: String,

@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 29,
-  "latestVersionName": "1.0.29",
+  "latestVersionCode": 30,
+  "latestVersionName": "1.0.30",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Worker privilege controls in Owner dashboard, proposal gate for loan modifications, payment deletion protection, and live worker collection summary."
+  "changelog": "Clarity overhaul for Pending Approvals cards with customer names, old vs new amount diffs, worker usernames, and complete proposal dialog wiring for payment and loan amount edits."
 }

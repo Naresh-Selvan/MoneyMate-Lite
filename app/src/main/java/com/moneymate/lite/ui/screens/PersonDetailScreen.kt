@@ -88,6 +88,12 @@ fun PersonDetailScreen(
     var expandedLoanId by remember { mutableStateOf<Long?>(null) }
     var paymentToDelete by remember { mutableStateOf<Payment?>(null) }
     var editingPayment by remember { mutableStateOf<Payment?>(null) }
+    var pendingPaymentProposal by remember {
+        mutableStateOf<Triple<Long, Double, Pair<Double, Long>>?>(null) // paymentId, oldAmount, (newAmount, newDate)
+    }
+    var pendingNewLoanProposal by remember {
+        mutableStateOf<Pair<Long, Pair<Double, Long>>?>(null) // personId, (amount, date)
+    }
 
     // Fetch person data once
     LaunchedEffect(personId) {
@@ -219,6 +225,10 @@ fun PersonDetailScreen(
                 scope.launch {
                     snackbarHostState.showSnackbar("Loan created")
                 }
+            },
+            onRequestProposal = { amount, date ->
+                showNewLoanDialog = false
+                pendingNewLoanProposal = Pair(personId, Pair(amount, date))
             }
         )
     }
@@ -241,11 +251,16 @@ fun PersonDetailScreen(
     }
 
     if (editingPayment != null) {
+        val paymentToEdit = editingPayment!!
         EditPaymentDialog(
-            payment = editingPayment!!,
+            payment = paymentToEdit,
             loanViewModel = loanViewModel,
             onDismiss = { editingPayment = null },
-            onSaved = { editingPayment = null }
+            onSaved = { editingPayment = null },
+            onRequestProposal = { newAmount, newDate ->
+                editingPayment = null
+                pendingPaymentProposal = Triple(paymentToEdit.id, paymentToEdit.amount, Pair(newAmount, newDate))
+            }
         )
     }
 
@@ -258,7 +273,13 @@ fun PersonDetailScreen(
                 TextButton(
                     onClick = {
                         paymentToDelete?.let { payment ->
-                            loanViewModel.deletePayment(payment.id)
+                            loanViewModel.deletePayment(payment.id) { res ->
+                                if (res.isFailure) {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(res.exceptionOrNull()?.message ?: "Failed to delete payment")
+                                    }
+                                }
+                            }
                         }
                         paymentToDelete = null
                     }
@@ -269,6 +290,70 @@ fun PersonDetailScreen(
             dismissButton = {
                 TextButton(onClick = { paymentToDelete = null }) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Proposal dialog for editing payment
+    pendingPaymentProposal?.let { proposal ->
+        val paymentId = proposal.first
+        val oldAmount = proposal.second
+        val newAmount = proposal.third.first
+        val newDate = proposal.third.second
+        SubmitProposalDialog(
+            title = "Request Payment Edit",
+            summaryText = "Customer: ${person?.name ?: "Customer"}\nChange payment: ₹${"%.0f".format(oldAmount)} ➔ ₹${"%.0f".format(newAmount)}",
+            onDismiss = { pendingPaymentProposal = null },
+            onSubmit = { reason ->
+                scope.launch {
+                    val res = loanViewModel.submitPaymentEditProposal(
+                        fileSharedId = person?.fileSharedId ?: "file_${person?.fileId ?: 0}",
+                        fileName = person?.name ?: "Customer",
+                        paymentId = paymentId,
+                        customerName = person?.name ?: "Customer",
+                        oldAmount = oldAmount,
+                        newAmount = newAmount,
+                        newDate = newDate,
+                        reason = reason
+                    )
+                    pendingPaymentProposal = null
+                    if (res.isSuccess) {
+                        snackbarHostState.showSnackbar("Payment edit request submitted to Owner for approval!")
+                    } else {
+                        snackbarHostState.showSnackbar("Failed to submit request: ${res.exceptionOrNull()?.message}")
+                    }
+                }
+            }
+        )
+    }
+
+    // Proposal dialog for new loan
+    pendingNewLoanProposal?.let { proposal ->
+        val pId = proposal.first
+        val amount = proposal.second.first
+        val date = proposal.second.second
+        SubmitProposalDialog(
+            title = "Request New Loan Approval",
+            summaryText = "Customer: ${person?.name ?: "Customer"}\nNew Loan Amount: ₹${"%.0f".format(amount)}",
+            onDismiss = { pendingNewLoanProposal = null },
+            onSubmit = { reason ->
+                scope.launch {
+                    val res = loanViewModel.submitNewLoanProposal(
+                        fileSharedId = person?.fileSharedId ?: "file_${person?.fileId ?: 0}",
+                        fileName = person?.name ?: "Customer",
+                        personId = pId,
+                        customerName = person?.name ?: "Customer",
+                        amount = amount,
+                        date = date,
+                        reason = reason
+                    )
+                    pendingNewLoanProposal = null
+                    if (res.isSuccess) {
+                        snackbarHostState.showSnackbar("New loan request submitted to Owner for approval!")
+                    } else {
+                        snackbarHostState.showSnackbar("Failed to submit request: ${res.exceptionOrNull()?.message}")
+                    }
                 }
             }
         )

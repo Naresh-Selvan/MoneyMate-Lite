@@ -70,6 +70,7 @@ fun PendingApprovalsScreen(
 ) {
     val pendingRequests by viewModel.pendingRequests.collectAsState()
     val isProcessing by viewModel.isProcessing.collectAsState()
+    val customerNames by viewModel.customerNames.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val dateFormat = remember { SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()) }
@@ -125,6 +126,7 @@ fun PendingApprovalsScreen(
                 items(pendingRequests, key = { it.id }) { request ->
                     ApprovalCard(
                         request = request,
+                        customerName = customerNames[request.id],
                         dateFormat = dateFormat,
                         isProcessing = isProcessing,
                         onApprove = {
@@ -207,6 +209,7 @@ fun PendingApprovalsScreen(
 @Composable
 private fun ApprovalCard(
     request: ApprovalRequestEntity,
+    customerName: String?,
     dateFormat: SimpleDateFormat,
     isProcessing: Boolean,
     onApprove: () -> Unit,
@@ -220,6 +223,9 @@ private fun ApprovalCard(
     }
 
     val isConflict = request.status == ApprovalStatus.CONFLICT_STALE.name
+    val resolvedCustomerName = payload.optString("customerName").ifBlank {
+        base?.optString("customerName")?.ifBlank { null }
+    } ?: customerName ?: "Customer"
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -238,8 +244,21 @@ private fun ApprovalCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val actionLabel = when (request.actionType) {
+                    "EDIT_LOAN" -> "✏️ EDIT LOAN"
+                    "EDIT_PAYMENT" -> "💳 EDIT PAYMENT"
+                    "CREATE_LOAN" -> "➕ NEW LOAN"
+                    "INCREASE_LOAN" -> "📈 INCREASE LOAN"
+                    "CREATE_CUSTOMER_WITH_LOAN" -> "👤 NEW CUSTOMER & LOAN"
+                    "EDIT_CUSTOMER" -> "👤 EDIT CUSTOMER"
+                    "DELETE_PAYMENT" -> "🗑️ REVERSE PAYMENT"
+                    "DELETE_LOAN" -> "🗑️ DELETE LOAN"
+                    "DELETE_CUSTOMER" -> "🗑️ DELETE CUSTOMER"
+                    "DELETE_FILE" -> "🗑️ DELETE FILE"
+                    else -> request.actionType.replace("_", " ")
+                }
                 Text(
-                    text = request.actionType.replace("_", " "),
+                    text = actionLabel,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -267,6 +286,22 @@ private fun ApprovalCard(
             HorizontalDivider()
             Spacer(modifier = Modifier.height(8.dp))
 
+            // Customer Name
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Customer: ",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = resolvedCustomerName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "Reason: ${request.reason}",
                 style = MaterialTheme.typography.bodyMedium,
@@ -274,7 +309,13 @@ private fun ApprovalCard(
             )
 
             Spacer(modifier = Modifier.height(8.dp))
-            DiffContent(request = request, base = base, payload = payload)
+            DiffContent(
+                request = request,
+                base = base,
+                payload = payload,
+                customerName = resolvedCustomerName,
+                dateFormat = dateFormat
+            )
 
             if (isConflict) {
                 Spacer(modifier = Modifier.height(8.dp))
@@ -326,41 +367,177 @@ private fun ApprovalCard(
 private fun DiffContent(
     request: ApprovalRequestEntity,
     base: JSONObject?,
-    payload: JSONObject
+    payload: JSONObject,
+    customerName: String,
+    dateFormat: SimpleDateFormat
 ) {
-    Column {
-        when (request.actionType) {
-            "CREATE_CUSTOMER_WITH_LOAN" -> {
-                Text("New Customer: ${payload.optString("customerName")}", style = MaterialTheme.typography.bodySmall)
-                val initialLoan = payload.optDouble("initialLoanAmount", 0.0)
-                if (initialLoan > 0) {
-                    Text("Initial Loan Amount: ₹${"%.0f".format(initialLoan)}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f)
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            when (request.actionType) {
+                "EDIT_LOAN" -> {
+                    val oldAmount = base?.optDouble("amount") ?: payload.optDouble("oldAmount", 0.0)
+                    val newAmount = payload.optDouble("amount", 0.0)
+                    val diff = newAmount - oldAmount
+                    val dateMillis = payload.optLong("date", 0L)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("Current Loan", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("₹${"%.0f".format(oldAmount)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        }
+                        Text("➔", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                        Column {
+                            Text("Proposed Loan", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("₹${"%.0f".format(newAmount)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        }
+                        Column {
+                            Text("Difference", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            val diffColor = if (diff < 0) Color(0xFFE53935) else Color(0xFF43A047)
+                            val diffSign = if (diff >= 0) "+₹" else "-₹"
+                            Text("$diffSign${"%.0f".format(Math.abs(diff))}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = diffColor)
+                        }
+                    }
+
+                    if (dateMillis > 0L) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Loan Date: ${dateFormat.format(Date(dateMillis))}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    if (diff < 0) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "⚠️ Reducing loan by ₹${"%.0f".format(Math.abs(diff))}. If customer paid ≥ ₹${"%.0f".format(newAmount)}, loan will become COMPLETED.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFFFA000),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
-            }
-            "CREATE_LOAN", "INCREASE_LOAN" -> {
-                val amt = payload.optDouble("amount", payload.optDouble("additionalAmount", 0.0))
-                Text("Proposed Loan Amount: ₹${"%.0f".format(amt)}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-            }
-            "EDIT_CUSTOMER" -> {
-                base?.let { b ->
-                    Text("Current Name: ${b.optString("name")}", style = MaterialTheme.typography.bodySmall)
+
+                "EDIT_PAYMENT" -> {
+                    val oldAmount = base?.optDouble("amount") ?: payload.optDouble("oldAmount", 0.0)
+                    val newAmount = payload.optDouble("amount", 0.0)
+                    val diff = newAmount - oldAmount
+                    val dateMillis = payload.optLong("date", 0L)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("Current Payment", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("₹${"%.0f".format(oldAmount)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        }
+                        Text("➔", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                        Column {
+                            Text("Proposed Payment", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("₹${"%.0f".format(newAmount)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        }
+                        Column {
+                            Text("Difference", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            val diffColor = if (diff < 0) Color(0xFFE53935) else Color(0xFF43A047)
+                            val diffSign = if (diff >= 0) "+₹" else "-₹"
+                            Text("$diffSign${"%.0f".format(Math.abs(diff))}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = diffColor)
+                        }
+                    }
+
+                    if (dateMillis > 0L) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Payment Date: ${dateFormat.format(Date(dateMillis))}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
-                Text("Proposed Name: ${payload.optString("name")}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-                if (payload.has("mobileNumber")) {
-                    Text("Phone: ${payload.optString("mobileNumber")}", style = MaterialTheme.typography.bodySmall)
+
+                "CREATE_CUSTOMER_WITH_LOAN" -> {
+                    val custName = payload.optString("customerName", customerName)
+                    val phone = payload.optString("phone").takeIf { it.isNotBlank() }
+                    val initialLoan = payload.optDouble("initialLoanAmount", 0.0)
+                    val dateMillis = payload.optLong("initialLoanDate", 0L)
+
+                    Text("New Customer: $custName", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                    phone?.let { Text("Phone: $it", style = MaterialTheme.typography.bodySmall) }
+                    if (initialLoan > 0) {
+                        Text(
+                            text = "Initial Loan Amount: ₹${"%.0f".format(initialLoan)}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    if (dateMillis > 0L) {
+                        Text("Date: ${dateFormat.format(Date(dateMillis))}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
-            }
-            "EDIT_PAYMENT" -> {
-                base?.let { b ->
-                    Text("Current Amount: ₹${"%.0f".format(b.optDouble("amount", 0.0))}", style = MaterialTheme.typography.bodySmall)
+
+                "CREATE_LOAN", "INCREASE_LOAN" -> {
+                    val amt = payload.optDouble("amount", payload.optDouble("additionalAmount", 0.0))
+                    val dateMillis = payload.optLong("date", 0L)
+                    val label = if (request.actionType == "INCREASE_LOAN") "Additional Loan Amount" else "Proposed Loan Amount"
+                    Text("$label: ₹${"%.0f".format(amt)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    if (dateMillis > 0L) {
+                        Text("Date: ${dateFormat.format(Date(dateMillis))}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
-                Text("Proposed Amount: ₹${"%.0f".format(payload.optDouble("amount", 0.0))}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-            }
-            "DELETE_CUSTOMER", "DELETE_LOAN", "DELETE_PAYMENT", "DELETE_FILE" -> {
-                Text("Action: Permanent soft deletion of record", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-            }
-            else -> {
-                Text("Proposed Changes: ${payload.toString()}", style = MaterialTheme.typography.bodySmall)
+
+                "EDIT_CUSTOMER" -> {
+                    base?.let { b ->
+                        Text("Current Name: ${b.optString("name")}", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text("Proposed Name: ${payload.optString("name")}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                    if (payload.has("mobileNumber")) {
+                        Text("Phone: ${payload.optString("mobileNumber")}", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+
+                "DELETE_PAYMENT" -> {
+                    val amt = base?.optDouble("amount") ?: 0.0
+                    Text("Action: Reverse payment of ₹${"%.0f".format(amt)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                    Text("Customer: $customerName", style = MaterialTheme.typography.bodySmall)
+                }
+
+                "DELETE_CUSTOMER", "DELETE_LOAN", "DELETE_FILE" -> {
+                    val rec = request.recordType.lowercase()
+                    Text("Action: Delete $rec", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                    Text("Record will be moved to Recently Deleted.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+
+                else -> {
+                    val keys = payload.keys()
+                    Column {
+                        while (keys.hasNext()) {
+                            val key = keys.next()
+                            val value = payload.get(key)
+                            val displayValue = if (key.contains("date", ignoreCase = true) && value is Number) {
+                                dateFormat.format(Date(value.toLong()))
+                            } else if (key.contains("amount", ignoreCase = true) && value is Number) {
+                                "₹${"%.0f".format(value.toDouble())}"
+                            } else {
+                                value.toString()
+                            }
+                            Text(
+                                text = "${key.replaceFirstChar { it.uppercase() }}: $displayValue",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
             }
         }
     }

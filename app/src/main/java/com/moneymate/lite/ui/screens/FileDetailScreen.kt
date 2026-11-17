@@ -681,11 +681,12 @@ fun FileDetailScreen(
                                     pendingLoanProposal = LoanProposalTarget(
                                         fileSharedId = fileInfo?.sharedId ?: "file_$fileId",
                                         fileName = displayName,
-                                        loanId = activeLoan.loanId,
+                                        targetId = activeLoan.loanId,
                                         oldAmount = activeLoan.totalAmount,
                                         newAmount = result.initialLoanAmount,
                                         newDate = result.initialLoanDate,
-                                        personName = person.name
+                                        personName = person.name,
+                                        isPayment = false
                                     )
                                 } else {
                                     snackbarHostState.showSnackbar(err)
@@ -764,6 +765,8 @@ fun FileDetailScreen(
             persons = persons,
             selectedDate = selectedDateMillis,
             loanViewModel = loanViewModel,
+            fileSharedId = fileInfo?.sharedId ?: "file_$fileId",
+            fileName = displayName,
             preSelectedPerson = transactionPersonTarget,
             onDismiss = { 
                 showAddTransactionDialog = false
@@ -772,6 +775,11 @@ fun FileDetailScreen(
             onSaved = { 
                 showAddTransactionDialog = false
                 transactionPersonTarget = null
+            },
+            onRequestProposal = { proposal ->
+                showAddTransactionDialog = false
+                transactionPersonTarget = null
+                pendingLoanProposal = proposal
             }
         )
     }
@@ -835,26 +843,64 @@ fun FileDetailScreen(
         )
     }
 
-    // Pending Loan Modification Proposal Dialog
+    // Pending Proposal Dialog (Loan modification, payment edit, or new loan)
     pendingLoanProposal?.let { proposal ->
+        val title = when {
+            proposal.isPayment -> "Request Payment Edit"
+            proposal.oldAmount == 0.0 -> "Request New Loan Approval"
+            else -> "Request Loan Modification"
+        }
+        val summary = when {
+            proposal.isPayment -> "Customer: ${proposal.personName}\nChange payment: ₹${"%.0f".format(proposal.oldAmount)} ➔ ₹${"%.0f".format(proposal.newAmount)}"
+            proposal.oldAmount == 0.0 -> "Customer: ${proposal.personName}\nNew Loan: ₹${"%.0f".format(proposal.newAmount)}"
+            else -> "Customer: ${proposal.personName}\nChange loan: ₹${"%.0f".format(proposal.oldAmount)} ➔ ₹${"%.0f".format(proposal.newAmount)}"
+        }
         SubmitProposalDialog(
-            title = "Request Loan Modification",
-            summaryText = "Customer: ${proposal.personName}\nChange amount: ₹${"%.0f".format(proposal.oldAmount)} ➔ ₹${"%.0f".format(proposal.newAmount)}",
+            title = title,
+            summaryText = summary,
             onDismiss = { pendingLoanProposal = null },
             onSubmit = { reason ->
                 scope.launch {
-                    val res = loanViewModel.submitLoanChangeProposal(
-                        fileSharedId = proposal.fileSharedId,
-                        fileName = proposal.fileName,
-                        loanId = proposal.loanId,
-                        oldAmount = proposal.oldAmount,
-                        newAmount = proposal.newAmount,
-                        newDate = proposal.newDate,
-                        reason = reason
-                    )
+                    val res = when {
+                        proposal.isPayment -> {
+                            loanViewModel.submitPaymentEditProposal(
+                                fileSharedId = proposal.fileSharedId,
+                                fileName = proposal.fileName,
+                                paymentId = proposal.targetId,
+                                customerName = proposal.personName,
+                                oldAmount = proposal.oldAmount,
+                                newAmount = proposal.newAmount,
+                                newDate = proposal.newDate,
+                                reason = reason
+                            )
+                        }
+                        proposal.oldAmount == 0.0 -> {
+                            loanViewModel.submitNewLoanProposal(
+                                fileSharedId = proposal.fileSharedId,
+                                fileName = proposal.fileName,
+                                personId = proposal.targetId,
+                                customerName = proposal.personName,
+                                amount = proposal.newAmount,
+                                date = proposal.newDate,
+                                reason = reason
+                            )
+                        }
+                        else -> {
+                            loanViewModel.submitLoanChangeProposal(
+                                fileSharedId = proposal.fileSharedId,
+                                fileName = proposal.fileName,
+                                loanId = proposal.targetId,
+                                customerName = proposal.personName,
+                                oldAmount = proposal.oldAmount,
+                                newAmount = proposal.newAmount,
+                                newDate = proposal.newDate,
+                                reason = reason
+                            )
+                        }
+                    }
                     pendingLoanProposal = null
                     if (res.isSuccess) {
-                        snackbarHostState.showSnackbar("Loan change request submitted to Owner for approval!")
+                        snackbarHostState.showSnackbar("Request submitted to Owner for approval!")
                     } else {
                         snackbarHostState.showSnackbar("Failed to submit request: ${res.exceptionOrNull()?.message}")
                     }
@@ -870,9 +916,12 @@ private fun AddTransactionDialog(
     persons: List<Person>,
     selectedDate: Long,
     loanViewModel: LoanViewModel,
+    fileSharedId: String,
+    fileName: String,
     preSelectedPerson: Person? = null,
     onDismiss: () -> Unit,
-    onSaved: () -> Unit
+    onSaved: () -> Unit,
+    onRequestProposal: ((LoanProposalTarget) -> Unit)? = null
 ) {
     var selectedPerson by remember { mutableStateOf<Person?>(preSelectedPerson) }
     var showPersonSelector by remember { mutableStateOf(false) }
@@ -986,7 +1035,25 @@ private fun AddTransactionDialog(
                         val result = loanViewModel.addGivenTransaction(person.id, amount, selectedDate)
                         result.fold(
                             onSuccess = { onSaved() },
-                            onFailure = { errorMessage = it.message ?: "Failed to record transaction" }
+                            onFailure = { err ->
+                                val msg = err.message ?: "Failed to record transaction"
+                                if (msg.contains("REQUIRE_APPROVAL") || msg.contains("PERMISSION_DENIED")) {
+                                    onRequestProposal?.invoke(
+                                        LoanProposalTarget(
+                                            fileSharedId = fileSharedId,
+                                            fileName = fileName,
+                                            targetId = person.id,
+                                            oldAmount = 0.0,
+                                            newAmount = amount,
+                                            newDate = selectedDate,
+                                            personName = person.name,
+                                            isPayment = false
+                                        )
+                                    )
+                                } else {
+                                    errorMessage = msg
+                                }
+                            }
                         )
                     } else {
                         val result = loanViewModel.addReceivedTransaction(person.id, amount, selectedDate)
@@ -1216,11 +1283,12 @@ private fun EditTransactionDialog(
                                     LoanProposalTarget(
                                         fileSharedId = fileSharedId,
                                         fileName = fileName,
-                                        loanId = transaction.id,
+                                        targetId = transaction.id,
                                         oldAmount = transaction.amount,
                                         newAmount = amount,
                                         newDate = transactionDate,
-                                        personName = transaction.personName
+                                        personName = transaction.personName,
+                                        isPayment = transaction.type == DateTransactionType.RECEIVED
                                     )
                                 )
                             } else {
@@ -1382,11 +1450,12 @@ private fun TransactionRow(
 private data class LoanProposalTarget(
     val fileSharedId: String,
     val fileName: String,
-    val loanId: Long,
+    val targetId: Long,
     val oldAmount: Double,
     val newAmount: Double,
     val newDate: Long,
-    val personName: String
+    val personName: String,
+    val isPayment: Boolean = false
 )
 
 enum class DateTransactionType {

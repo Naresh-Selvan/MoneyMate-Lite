@@ -183,4 +183,58 @@ class ApprovalAndProposalTest {
         val canBeApproved = (request.status == ApprovalStatus.PENDING.name)
         assertFalse(canBeApproved)
     }
+
+    @Test
+    fun `edit loan proposal payload correctly retains customer name and amounts for owner diff`() {
+        val payloadJson = """{"amount":2000.0,"date":1700000000000,"oldAmount":20000.0,"customerName":"John Doe"}"""
+        val baseJson = """{"amount":20000.0,"customerName":"John Doe"}"""
+
+        val request = ApprovalRequestEntity(
+            id = "req_diff_1",
+            businessId = "biz_1",
+            workerId = "worker_staff3",
+            workerName = "staff3",
+            fileSharedId = "f1",
+            fileName = "Collection A",
+            recordType = "LOAN",
+            recordSharedId = "loan_1",
+            actionType = PendingActionType.EDIT_LOAN.name,
+            reason = "incorrect initial entry",
+            baseSnapshotJson = baseJson,
+            proposedPayloadJson = payloadJson
+        )
+
+        assertEquals("staff3", request.workerName)
+        assertEquals(PendingActionType.EDIT_LOAN.name, request.actionType)
+        assertTrue(request.proposedPayloadJson.contains("John Doe"))
+        assertTrue(request.proposedPayloadJson.contains("2000.0"))
+        assertTrue(request.baseSnapshotJson!!.contains("20000.0"))
+    }
+
+    @Test
+    fun `edit payment proposal payload retains customer name and calculates diff`() {
+        val payloadJson = """{"amount":400.0,"date":1700000000000,"oldAmount":500.0,"customerName":"Jane Smith"}"""
+        val baseJson = """{"amount":500.0,"customerName":"Jane Smith"}"""
+
+        val request = ApprovalRequestEntity(
+            id = "req_pay_1",
+            businessId = "biz_1",
+            workerId = "worker_staff2",
+            workerName = "Naresh (@staff2)",
+            fileSharedId = "f1",
+            fileName = "Collection B",
+            recordType = "PAYMENT",
+            recordSharedId = "pay_1",
+            actionType = PendingActionType.EDIT_PAYMENT.name,
+            reason = "change entered amount",
+            baseSnapshotJson = baseJson,
+            proposedPayloadJson = payloadJson
+        )
+
+        assertEquals("Naresh (@staff2)", request.workerName)
+        assertEquals(PendingActionType.EDIT_PAYMENT.name, request.actionType)
+        assertTrue(request.proposedPayloadJson.contains("Jane Smith"))
+        assertTrue(request.proposedPayloadJson.contains("400.0"))
+        assertTrue(request.baseSnapshotJson!!.contains("500.0"))
+    }
 }

@@ -39,6 +39,30 @@ class ApprovalViewModel @Inject constructor(
             approvalRepository.getRequestsByWorkerFlow(bizId, uid)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private val _customerNames = MutableStateFlow<Map<String, String>>(emptyMap())
+    val customerNames: StateFlow<Map<String, String>> = _customerNames.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            pendingRequests.collect { requests ->
+                val current = HashMap<String, String>(_customerNames.value)
+                var updated = false
+                for (req in requests) {
+                    if (!current.containsKey(req.id)) {
+                        val name = approvalRepository.resolveCustomerNameForRecord(req.recordType, req.recordSharedId)
+                        if (name != null) {
+                            current[req.id] = name
+                            updated = true
+                        }
+                    }
+                }
+                if (updated) {
+                    _customerNames.value = current
+                }
+            }
+        }
+    }
+
     private val _isProcessing = MutableStateFlow(false)
     val isProcessing: StateFlow<Boolean> = _isProcessing.asStateFlow()
 
@@ -58,7 +82,7 @@ class ApprovalViewModel @Inject constructor(
             val result = approvalRepository.approveRequest(
                 requestId = requestId,
                 reviewerId = user.uid,
-                reviewerName = user.displayName ?: "Owner"
+                reviewerName = authManager.getEffectiveUserName()
             )
             _isProcessing.value = false
             if (result.isSuccess) {
@@ -86,7 +110,7 @@ class ApprovalViewModel @Inject constructor(
             val result = approvalRepository.rejectRequest(
                 requestId = requestId,
                 reviewerId = user.uid,
-                reviewerName = user.displayName ?: "Owner",
+                reviewerName = authManager.getEffectiveUserName(),
                 rejectionReason = reason
             )
             _isProcessing.value = false
@@ -114,7 +138,7 @@ class ApprovalViewModel @Inject constructor(
             val result = approvalRepository.withdrawProposal(
                 requestId = requestId,
                 workerId = user.uid,
-                workerName = user.displayName ?: "Worker"
+                workerName = authManager.getEffectiveUserName()
             )
             _isProcessing.value = false
             if (result.isSuccess) {
@@ -149,7 +173,7 @@ class ApprovalViewModel @Inject constructor(
             val result = approvalRepository.submitProposal(
                 businessId = bizId,
                 workerId = user.uid,
-                workerName = user.displayName?.ifBlank { "Worker" } ?: "Worker",
+                workerName = authManager.getEffectiveUserName(),
                 fileSharedId = fileSharedId,
                 fileName = fileName,
                 recordType = recordType,

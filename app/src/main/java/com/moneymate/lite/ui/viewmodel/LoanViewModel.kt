@@ -100,7 +100,7 @@ class LoanViewModel @Inject constructor(
                 activityLogRepository.logActivity(
                     businessId = authManager.businessId.value,
                     actorId = user.uid,
-                    actorName = user.displayName ?: profile?.displayName ?: "User",
+                    actorName = authManager.getEffectiveUserName(),
                     actorRole = role,
                     action = "LOAN_CREATED",
                     recordType = "LOAN",
@@ -131,7 +131,7 @@ class LoanViewModel @Inject constructor(
                     activityLogRepository.logActivity(
                         businessId = authManager.businessId.value,
                         actorId = user.uid,
-                        actorName = user.displayName ?: profile?.displayName ?: "User",
+                        actorName = authManager.getEffectiveUserName(),
                         actorRole = role,
                         action = "PAYMENT_DELETED",
                         recordType = "PAYMENT",
@@ -190,7 +190,7 @@ class LoanViewModel @Inject constructor(
                 activityLogRepository.logActivity(
                     businessId = authManager.businessId.value,
                     actorId = user.uid,
-                    actorName = user.displayName ?: profile?.displayName ?: "User",
+                    actorName = authManager.getEffectiveUserName(),
                     actorRole = role,
                     action = "LOAN_GIVEN",
                     details = "Gave loan amount of ₹$amount",
@@ -215,7 +215,7 @@ class LoanViewModel @Inject constructor(
                 activityLogRepository.logActivity(
                     businessId = authManager.businessId.value,
                     actorId = user.uid,
-                    actorName = user.displayName ?: profile?.displayName ?: "User",
+                    actorName = authManager.getEffectiveUserName(),
                     actorRole = role,
                     action = "PAYMENT_RECORDED",
                     details = "Collected payment of ₹$amount",
@@ -241,7 +241,7 @@ class LoanViewModel @Inject constructor(
                 activityLogRepository.logActivity(
                     businessId = authManager.businessId.value,
                     actorId = user.uid,
-                    actorName = user.displayName ?: profile?.displayName ?: "User",
+                    actorName = authManager.getEffectiveUserName(),
                     actorRole = role,
                     action = "LOAN_UPDATED",
                     recordType = "LOAN",
@@ -269,7 +269,7 @@ class LoanViewModel @Inject constructor(
                 activityLogRepository.logActivity(
                     businessId = authManager.businessId.value,
                     actorId = user.uid,
-                    actorName = user.displayName ?: profile?.displayName ?: "User",
+                    actorName = authManager.getEffectiveUserName(),
                     actorRole = role,
                     action = "LOAN_UPDATED",
                     recordType = "LOAN",
@@ -297,7 +297,7 @@ class LoanViewModel @Inject constructor(
                 activityLogRepository.logActivity(
                     businessId = authManager.businessId.value,
                     actorId = user.uid,
-                    actorName = user.displayName ?: profile?.displayName ?: "User",
+                    actorName = authManager.getEffectiveUserName(),
                     actorRole = role,
                     action = "PAYMENT_UPDATED",
                     recordType = "PAYMENT",
@@ -325,7 +325,7 @@ class LoanViewModel @Inject constructor(
                 activityLogRepository.logActivity(
                     businessId = authManager.businessId.value,
                     actorId = user.uid,
-                    actorName = user.displayName ?: profile?.displayName ?: "User",
+                    actorName = authManager.getEffectiveUserName(),
                     actorRole = role,
                     action = "PAYMENT_UPDATED",
                     recordType = "PAYMENT",
@@ -356,7 +356,7 @@ class LoanViewModel @Inject constructor(
                     activityLogRepository.logActivity(
                         businessId = authManager.businessId.value,
                         actorId = user.uid,
-                        actorName = user.displayName ?: profile?.displayName ?: "User",
+                        actorName = authManager.getEffectiveUserName(),
                         actorRole = role,
                         action = "LOAN_DELETED",
                         recordType = "LOAN",
@@ -376,6 +376,7 @@ class LoanViewModel @Inject constructor(
         fileSharedId: String,
         fileName: String,
         loanId: Long,
+        customerName: String = "",
         oldAmount: Double,
         newAmount: Double,
         newDate: Long,
@@ -386,24 +387,138 @@ class LoanViewModel @Inject constructor(
         val bizId = authManager.businessId.value
         val loan = repository.getLoanById(loanId)
         val loanSharedId = loan?.sharedId ?: "loan_$loanId"
+        val effectiveWorkerName = authManager.getEffectiveUserName()
+        val resolvedCustomer = if (customerName.isNotBlank()) {
+            customerName
+        } else {
+            approvalRepository.resolveCustomerNameForRecord("LOAN", loanSharedId) ?: "Customer"
+        }
+
         val payload = JSONObject().apply {
             put("amount", newAmount)
             put("date", newDate)
+            put("oldAmount", oldAmount)
+            put("customerName", resolvedCustomer)
         }.toString()
         val base = JSONObject().apply {
             put("amount", oldAmount)
+            put("date", loan?.dateGiven ?: newDate)
+            put("customerName", resolvedCustomer)
         }.toString()
 
         return try {
             approvalRepository.submitProposal(
                 businessId = bizId,
                 workerId = user.uid,
-                workerName = user.displayName?.ifBlank { "Worker" } ?: "Worker",
+                workerName = effectiveWorkerName,
                 fileSharedId = fileSharedId,
                 fileName = fileName,
                 recordType = "LOAN",
                 recordSharedId = loanSharedId,
                 actionType = PendingActionType.EDIT_LOAN,
+                reason = reason,
+                baseSnapshotJson = base,
+                proposedPayloadJson = payload
+            )
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun submitPaymentEditProposal(
+        fileSharedId: String,
+        fileName: String,
+        paymentId: Long,
+        customerName: String = "",
+        oldAmount: Double,
+        newAmount: Double,
+        newDate: Long,
+        reason: String
+    ): Result<Unit> {
+        val user = authManager.currentUser.value
+            ?: return Result.failure(IllegalStateException("Not authenticated"))
+        val bizId = authManager.businessId.value
+        val payment = repository.getPaymentById(paymentId)
+        val paymentSharedId = payment?.sharedId ?: "payment_$paymentId"
+        val effectiveWorkerName = authManager.getEffectiveUserName()
+        val resolvedCustomer = if (customerName.isNotBlank()) {
+            customerName
+        } else {
+            approvalRepository.resolveCustomerNameForRecord("PAYMENT", paymentSharedId) ?: "Customer"
+        }
+
+        val payload = JSONObject().apply {
+            put("amount", newAmount)
+            put("date", newDate)
+            put("oldAmount", oldAmount)
+            put("customerName", resolvedCustomer)
+        }.toString()
+        val base = JSONObject().apply {
+            put("amount", oldAmount)
+            put("date", payment?.date ?: newDate)
+            put("customerName", resolvedCustomer)
+        }.toString()
+
+        return try {
+            approvalRepository.submitProposal(
+                businessId = bizId,
+                workerId = user.uid,
+                workerName = effectiveWorkerName,
+                fileSharedId = fileSharedId,
+                fileName = fileName,
+                recordType = "PAYMENT",
+                recordSharedId = paymentSharedId,
+                actionType = PendingActionType.EDIT_PAYMENT,
+                reason = reason,
+                baseSnapshotJson = base,
+                proposedPayloadJson = payload
+            )
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun submitNewLoanProposal(
+        fileSharedId: String,
+        fileName: String,
+        personId: Long,
+        customerName: String = "",
+        amount: Double,
+        date: Long,
+        reason: String
+    ): Result<Unit> {
+        val user = authManager.currentUser.value
+            ?: return Result.failure(IllegalStateException("Not authenticated"))
+        val bizId = authManager.businessId.value
+        val effectiveWorkerName = authManager.getEffectiveUserName()
+        val personSharedId = approvalRepository.getPersonSharedId(personId) ?: "person_$personId"
+        val resolvedCustomer = if (customerName.isNotBlank()) {
+            customerName
+        } else {
+            approvalRepository.resolveCustomerNameForRecord("CUSTOMER", personSharedId) ?: "Customer"
+        }
+
+        val payload = JSONObject().apply {
+            put("amount", amount)
+            put("date", date)
+            put("customerName", resolvedCustomer)
+        }.toString()
+        val base = JSONObject().apply {
+            put("customerName", resolvedCustomer)
+        }.toString()
+
+        return try {
+            approvalRepository.submitProposal(
+                businessId = bizId,
+                workerId = user.uid,
+                workerName = effectiveWorkerName,
+                fileSharedId = fileSharedId,
+                fileName = fileName,
+                recordType = "CUSTOMER",
+                recordSharedId = personSharedId,
+                actionType = PendingActionType.CREATE_LOAN,
                 reason = reason,
                 baseSnapshotJson = base,
                 proposedPayloadJson = payload
@@ -432,7 +547,7 @@ class LoanViewModel @Inject constructor(
             approvalRepository.submitProposal(
                 businessId = bizId,
                 workerId = user.uid,
-                workerName = user.displayName?.ifBlank { "Worker" } ?: "Worker",
+                workerName = authManager.getEffectiveUserName(),
                 fileSharedId = fileSharedId,
                 fileName = fileName,
                 recordType = "PAYMENT",

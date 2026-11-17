@@ -35,7 +35,8 @@ fun NewLoanDialog(
     personId: Long,
     viewModel: LoanViewModel,
     onDismiss: () -> Unit,
-    onLoanCreated: () -> Unit
+    onLoanCreated: () -> Unit,
+    onRequestProposal: ((amount: Double, date: Long) -> Unit)? = null
 ) {
     var amountText by remember { mutableStateOf("") }
     var amountError by remember { mutableStateOf(false) }
@@ -131,7 +132,12 @@ fun NewLoanDialog(
                                 onLoanCreated()
                             },
                             onFailure = { e ->
-                                errorMessage = e.message ?: "Failed to create loan"
+                                val msg = e.message ?: "Failed to create loan"
+                                if (msg.contains("REQUIRE_APPROVAL") || msg.contains("PERMISSION_DENIED")) {
+                                    onRequestProposal?.invoke(amount, dateGivenMillis)
+                                } else {
+                                    errorMessage = msg
+                                }
                             }
                         )
                     }

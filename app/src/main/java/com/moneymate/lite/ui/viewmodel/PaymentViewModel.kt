@@ -41,18 +41,19 @@ class PaymentViewModel @Inject constructor(
 
         if (role == UserRole.WORKER && user != null) {
             val syncStatus = if (isOnline) "SYNCED" else "PENDING_SYNC"
+            val effectiveName = authManager.getEffectiveUserName()
             loanRepository.recordWorkerPayment(
                 loanId = loanId,
                 amount = amount,
                 date = date,
                 workerId = user.uid,
-                workerName = user.displayName?.ifBlank { "Worker" } ?: "Worker",
+                workerName = effectiveName,
                 syncStatus = syncStatus
             )
             activityLogRepository.logActivity(
                 businessId = bizId,
                 actorId = user.uid,
-                actorName = user.displayName ?: "Worker",
+                actorName = effectiveName,
                 actorRole = UserRole.WORKER,
                 action = "PAYMENT_RECORDED",
                 details = "Recorded payment of ₹$amount ($syncStatus)",
@@ -69,7 +70,7 @@ class PaymentViewModel @Inject constructor(
                 activityLogRepository.logActivity(
                     businessId = bizId,
                     actorId = user.uid,
-                    actorName = user.displayName ?: "Owner",
+                    actorName = authManager.getEffectiveUserName(),
                     actorRole = UserRole.OWNER,
                     action = "PAYMENT_RECORDED",
                     details = "Recorded payment of ₹$amount",

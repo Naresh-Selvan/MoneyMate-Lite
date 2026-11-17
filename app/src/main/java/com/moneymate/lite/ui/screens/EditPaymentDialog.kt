@@ -36,7 +36,8 @@ fun EditPaymentDialog(
     payment: Payment,
     loanViewModel: LoanViewModel,
     onDismiss: () -> Unit,
-    onSaved: () -> Unit
+    onSaved: () -> Unit,
+    onRequestProposal: ((newAmount: Double, newDate: Long) -> Unit)? = null
 ) {
     var amountText by remember { mutableStateOf("%.0f".format(payment.amount)) }
     var amountError by remember { mutableStateOf(false) }
@@ -130,7 +131,14 @@ fun EditPaymentDialog(
                     val result = loanViewModel.updatePayment(payment.id, amount, paymentDate)
                     result.fold(
                         onSuccess = { onSaved() },
-                        onFailure = { errorMessage = it.message ?: "Failed to save payment" }
+                        onFailure = { err ->
+                            val msg = err.message ?: "Failed to save payment"
+                            if (msg.contains("REQUIRE_APPROVAL") || msg.contains("PERMISSION_DENIED")) {
+                                onRequestProposal?.invoke(amount, paymentDate)
+                            } else {
+                                errorMessage = msg
+                            }
+                        }
                     )
                 }
             }) {
