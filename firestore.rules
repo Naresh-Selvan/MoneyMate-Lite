@@ -68,7 +68,7 @@ service cloud.firestore {
 
     // Username lookup collection for worker provisioning and authentication
     match /usernames/{username} {
-      allow read: if isAuthenticated();
+      allow read: if true;
       allow write: if isAuthenticated();
     }
 
