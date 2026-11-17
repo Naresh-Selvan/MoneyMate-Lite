@@ -42,10 +42,15 @@ class LoanFileViewModel @Inject constructor(
         authManager.currentProfile,
         authManager.userRole
     ) { allFiles, profile, role ->
-        if (role == UserRole.WORKER && profile != null && !profile.accessAllFiles) {
-            allFiles.filter { it.sharedId in profile.allowedFileIds }
+        val businessFiles = if (profile != null && profile.businessId.isNotBlank()) {
+            allFiles.filter { it.businessId == profile.businessId }
         } else {
             allFiles
+        }
+        if (role == UserRole.WORKER && profile != null && !profile.accessAllFiles) {
+            businessFiles.filter { it.sharedId in profile.allowedFileIds }
+        } else {
+            businessFiles
         }
     }.stateIn(
         scope = viewModelScope,

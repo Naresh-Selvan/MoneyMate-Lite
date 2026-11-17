@@ -14,14 +14,18 @@ service cloud.firestore {
     function isBusinessOwner(bizId) {
       return isAuthenticated() && (
         bizId == 'biz_' + request.auth.uid ||
-        (getUserData().businessId == bizId && getUserData().role == 'OWNER')
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.businessId == bizId &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'OWNER')
       );
     }
 
     function isBusinessMember(bizId) {
       return isAuthenticated() && (
         bizId == 'biz_' + request.auth.uid ||
-        (getUserData().businessId == bizId && getUserData().isActive == true)
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.businessId == bizId &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive == true)
       );
     }
 
@@ -100,11 +104,14 @@ service cloud.firestore {
         allow write: if isBusinessOwner(businessId);
       }
 
-      // Customers Collection
+      // Persons & Customers Collection
+      match /persons/{personId} {
+        allow read: if isBusinessMember(businessId);
+        allow write: if isBusinessOwner(businessId);
+      }
+
       match /customers/{customerId} {
-        allow read: if isBusinessMember(businessId) &&
-          isWorkerWithFileAccess(businessId, resource.data.fileSharedId);
-        // Only owner can directly create, edit, or delete customers (workers submit approval requests)
+        allow read: if isBusinessMember(businessId);
         allow write: if isBusinessOwner(businessId);
       }
 

@@ -131,8 +131,8 @@ object CollectionSheetPdfGenerator {
             val dateWidth = titlePaint.measureText(dateText)
             canvas.drawText(dateText, PAGE_WIDTH - MARGIN_X - dateWidth, currentY + 12f, titlePaint)
 
-            // Subtitle Line
-            val summaryText = "Active Customers: ${rows.size}   |   Total Outstanding Balance: ₹${"%,.0f".format(totalBalance)}"
+            // Subtitle Line (only customer count and page, no outstanding total balance)
+            val summaryText = "Customers: ${rows.size}"
             canvas.drawText(summaryText, MARGIN_X, currentY + 26f, metaPaint)
             val pageStr = "Page $pageNumber of $totalPages (Legal Sheet)"
             val pageStrWidth = metaPaint.measureText(pageStr)
@@ -345,5 +345,48 @@ object CollectionSheetPdfGenerator {
             .build()
 
         printManager.print(jobName, printAdapter, printAttributes)
+    }
+
+    /**
+     * Saves the generated PDF directly into the device's public Downloads folder
+     * so the user can easily find, download, and open it from their phone's file manager.
+     */
+    fun downloadPdfToStorage(
+        context: Context,
+        pdfFile: File,
+        displayName: String,
+        dateMillis: Long
+    ): Result<String> {
+        return try {
+            val dateFormat = SimpleDateFormat("dd-MMM-yyyy", Locale.getDefault())
+            val dateStr = dateFormat.format(Date(dateMillis))
+            val cleanName = displayName.replace(Regex("[^a-zA-Z0-9_]"), "_")
+            val fileName = "Collection_Sheet_${cleanName}_${dateStr}.pdf"
+
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                val contentValues = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                    put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "application/pdf")
+                    put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+                }
+                val resolver = context.contentResolver
+                val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                    ?: return Result.failure(Exception("Could not create entry in Downloads"))
+
+                resolver.openOutputStream(uri)?.use { outStream ->
+                    FileInputStream(pdfFile).use { inStream ->
+                        inStream.copyTo(outStream)
+                    }
+                }
+                Result.success("Saved to Downloads/$fileName")
+            } else {
+                val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                val targetFile = File(downloadsDir, fileName)
+                pdfFile.copyTo(targetFile, overwrite = true)
+                Result.success("Saved to Downloads/$fileName")
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 }

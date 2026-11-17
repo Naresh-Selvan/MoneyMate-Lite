@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 32,
-  "latestVersionName": "1.0.32",
+  "latestVersionCode": 33,
+  "latestVersionName": "1.0.33",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Export Collection Sheet PDF restricted exclusively to OWNER (accessible from both Owner Dashboard and File Screen) with balances dynamically calculated up to the selected date."
+  "changelog": "Fix direct PDF downloading to Downloads folder, remove total outstanding balance from collection sheet, fix migration PERMISSION_DENIED with updated Firestore rules, and add full multi-device cloud sync for files, customers, loans, and payments on worker login."
 }

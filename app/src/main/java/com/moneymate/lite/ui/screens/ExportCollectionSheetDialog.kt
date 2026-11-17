@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Share
@@ -50,6 +51,8 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+
+enum class ExportAction { PRINT, SHARE, DOWNLOAD }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -96,7 +99,7 @@ fun ExportCollectionSheetDialog(
         }
     }
 
-    fun exportSheet(isPrint: Boolean) {
+    fun exportSheet(action: ExportAction) {
         if (isGenerating) return
         isGenerating = true
         scope.launch {
@@ -134,13 +137,33 @@ fun ExportCollectionSheetDialog(
                     rows = rows
                 )
 
-                if (isPrint) {
-                    CollectionSheetPdfGenerator.printPdf(context, pdfFile, "Collection_Sheet_$fileName")
-                } else {
-                    CollectionSheetPdfGenerator.shareOrOpenPdf(context, pdfFile, "Collection Sheet - $fileName")
+                when (action) {
+                    ExportAction.PRINT -> {
+                        CollectionSheetPdfGenerator.printPdf(context, pdfFile, "Collection_Sheet_$fileName")
+                        isGenerating = false
+                        onDismiss()
+                    }
+                    ExportAction.SHARE -> {
+                        CollectionSheetPdfGenerator.shareOrOpenPdf(context, pdfFile, "Collection Sheet - $fileName")
+                        isGenerating = false
+                        onDismiss()
+                    }
+                    ExportAction.DOWNLOAD -> {
+                        val downloadResult = CollectionSheetPdfGenerator.downloadPdfToStorage(
+                            context = context,
+                            pdfFile = pdfFile,
+                            displayName = fileName,
+                            dateMillis = exportPdfDateMillis
+                        )
+                        isGenerating = false
+                        if (downloadResult.isSuccess) {
+                            onError(downloadResult.getOrNull() ?: "Downloaded successfully!")
+                        } else {
+                            onError("Download failed: ${downloadResult.exceptionOrNull()?.message}")
+                        }
+                        onDismiss()
+                    }
                 }
-                isGenerating = false
-                onDismiss()
             } catch (e: Exception) {
                 isGenerating = false
                 onError("Failed to generate sheet: ${e.message}")
@@ -172,7 +195,7 @@ fun ExportCollectionSheetDialog(
                 )
 
                 Text(
-                    text = "Formatted for US Legal paper (8.5 × 14 in) with 2 side-by-side tables. Shows customer balance up to the chosen date followed by 7 blank collection boxes.",
+                    text = "Formatted for US Legal paper (8.5 × 14 in) with 2 side-by-side tables. Shows individual customer balances up to the chosen date followed by 7 blank collection boxes. Overall outstanding total is excluded.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -235,22 +258,30 @@ fun ExportCollectionSheetDialog(
             }
         },
         confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 OutlinedButton(
-                    onClick = { exportSheet(isPrint = true) },
+                    onClick = { exportSheet(ExportAction.PRINT) },
                     enabled = !isGenerating
                 ) {
                     Icon(Icons.Default.Print, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.size(6.dp))
+                    Spacer(modifier = Modifier.size(4.dp))
                     Text("Print")
                 }
-                Button(
-                    onClick = { exportSheet(isPrint = false) },
+                OutlinedButton(
+                    onClick = { exportSheet(ExportAction.SHARE) },
                     enabled = !isGenerating
                 ) {
                     Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.size(6.dp))
-                    Text("Export PDF")
+                    Spacer(modifier = Modifier.size(4.dp))
+                    Text("Share")
+                }
+                Button(
+                    onClick = { exportSheet(ExportAction.DOWNLOAD) },
+                    enabled = !isGenerating
+                ) {
+                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.size(4.dp))
+                    Text("Download")
                 }
             }
         },

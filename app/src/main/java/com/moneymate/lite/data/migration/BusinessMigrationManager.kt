@@ -181,6 +181,18 @@ class BusinessMigrationManager @Inject constructor(
             // 4. Upload to Firestore under businesses/{businessId}
             if (FirebaseAuth.getInstance().currentUser != null && businessId.isNotBlank()) {
                 val db = FirebaseFirestore.getInstance()
+
+                // Ensure business document exists first
+                db.collection("businesses").document(businessId).set(
+                    mapOf(
+                        "businessId" to businessId,
+                        "ownerUid" to actorId,
+                        "migrationStatus" to "IN_PROGRESS",
+                        "lastModified" to System.currentTimeMillis()
+                    ),
+                    SetOptions.merge()
+                ).await()
+
                 val files = loanFileDao.getAllFilesIncludingDeleted()
                 val persons = personDao.getAllPersonsIncludingDeleted()
                 val loans = loanDao.getAllLoansIncludingDeleted()
@@ -241,11 +253,12 @@ class BusinessMigrationManager @Inject constructor(
                     onProgress("Syncing payments to cloud...", completedOps, totalOps)
                 }
 
-                db.collection("businesses").document(businessId).update(
+                db.collection("businesses").document(businessId).set(
                     mapOf(
                         "migrationStatus" to "COMPLETED",
                         "migratedAt" to System.currentTimeMillis()
-                    )
+                    ),
+                    SetOptions.merge()
                 ).await()
             }
 
