@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PendingActions
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.SyncProblem
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -44,6 +45,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -95,11 +98,14 @@ fun HomeScreen(
     var showLogoutConfirm by remember { mutableStateOf(false) }
     var fileToDelete by remember { mutableStateOf<LoanFile?>(null) }
     var fileToRename by remember { mutableStateOf<LoanFile?>(null) }
+    var fileToExport by remember { mutableStateOf<LoanFile?>(null) }
     var renameText by remember { mutableStateOf("") }
     var newFileName by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("MoneyMate Lite") },
@@ -211,6 +217,7 @@ fun HomeScreen(
                                 fileToRename = file
                                 renameText = file.name
                             },
+                            onExportPdf = { fileToExport = file },
                             onClick = {
                                 navController.navigate("file_detail/${file.id}?name=${URLEncoder.encode(file.name, "UTF-8")}")
                             }
@@ -357,6 +364,19 @@ fun HomeScreen(
             }
         )
     }
+
+    if (userRole == UserRole.OWNER) {
+        fileToExport?.let { file ->
+            ExportCollectionSheetDialog(
+                fileId = file.id,
+                fileName = file.name.ifBlank { "Collection Sheet" },
+                onDismiss = { fileToExport = null },
+                onError = { msg ->
+                    scope.launch { snackbarHostState.showSnackbar(msg) }
+                }
+            )
+        }
+    }
 }
 
 @Composable
@@ -444,6 +464,7 @@ private fun FileCard(
     isWorker: Boolean,
     onDelete: () -> Unit,
     onRename: () -> Unit,
+    onExportPdf: () -> Unit,
     onClick: () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
@@ -502,6 +523,16 @@ private fun FileCard(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false }
                     ) {
+                        DropdownMenuItem(
+                            text = { Text("Export Collection Sheet (PDF)") },
+                            leadingIcon = {
+                                Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            },
+                            onClick = {
+                                showMenu = false
+                                onExportPdf()
+                            }
+                        )
                         DropdownMenuItem(
                             text = { Text("Rename") },
                             onClick = {

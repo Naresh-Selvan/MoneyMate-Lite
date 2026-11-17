@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 31,
-  "latestVersionName": "1.0.31",
+  "latestVersionCode": 32,
+  "latestVersionName": "1.0.32",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Activity History clarity with plain-language details and customer context, plus Export Collection Sheet as PDF formatted for US Legal paper with 2-column daily collection boxes."
+  "changelog": "Export Collection Sheet PDF restricted exclusively to OWNER (accessible from both Owner Dashboard and File Screen) with balances dynamically calculated up to the selected date."
 }

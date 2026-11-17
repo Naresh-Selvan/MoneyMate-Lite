@@ -80,6 +80,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.moneymate.lite.data.dao.LoanWithBalance
 import com.moneymate.lite.data.entity.Person
+import com.moneymate.lite.data.model.UserRole
+import com.moneymate.lite.ui.viewmodel.AuthViewModel
 import com.moneymate.lite.ui.viewmodel.LoanViewModel
 import com.moneymate.lite.ui.viewmodel.PersonViewModel
 import kotlinx.coroutines.launch
@@ -90,8 +92,6 @@ import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material3.Switch
-import com.moneymate.lite.util.CollectionSheetPdfGenerator
-import com.moneymate.lite.util.CollectionSheetRow
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -110,8 +110,11 @@ fun FileDetailScreen(
     name: String,
     navController: NavController,
     personViewModel: PersonViewModel = hiltViewModel(),
-    loanViewModel: LoanViewModel = hiltViewModel()
+    loanViewModel: LoanViewModel = hiltViewModel(),
+    authViewModel: AuthViewModel = hiltViewModel()
 ) {
+    val userRole by authViewModel.userRole.collectAsState()
+    val isOwner = userRole == UserRole.OWNER
     val persons by personViewModel.getPersonsByFile(fileId).collectAsState()
     val activeLoans by loanViewModel.getActiveLoansInFile(fileId).collectAsState()
     val scope = rememberCoroutineScope()
@@ -133,9 +136,6 @@ fun FileDetailScreen(
     var pendingLoanProposal by remember { mutableStateOf<LoanProposalTarget?>(null) }
 
     var showExportPdfDateDialog by remember { mutableStateOf(false) }
-    var exportPdfDateMillis by rememberSaveable { mutableStateOf(System.currentTimeMillis()) }
-    var exportOnlyActiveBalances by rememberSaveable { mutableStateOf(true) }
-    var showExportDatePicker by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
 
@@ -404,16 +404,18 @@ fun FileDetailScreen(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false }
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("Export Collection Sheet (PDF)") },
-                            leadingIcon = {
-                                Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            },
-                            onClick = {
-                                showMenu = false
-                                showExportPdfDateDialog = true
-                            }
-                        )
+                        if (isOwner) {
+                            DropdownMenuItem(
+                                text = { Text("Export Collection Sheet (PDF)") },
+                                leadingIcon = {
+                                    Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    showExportPdfDateDialog = true
+                                }
+                            )
+                        }
                         DropdownMenuItem(
                             text = { Text("Recently Deleted") },
                             onClick = {
@@ -930,156 +932,14 @@ fun FileDetailScreen(
         )
     }
 
-    // Date picker for PDF export date
-    if (showExportDatePicker) {
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = exportPdfDateMillis
-        )
-        DatePickerDialog(
-            onDismissRequest = { showExportDatePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let { exportPdfDateMillis = it }
-                    showExportDatePicker = false
-                }) {
-                    Text("OK")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showExportDatePicker = false }) {
-                    Text("Cancel")
-                }
-            }
-        ) {
-            DatePicker(state = datePickerState)
-        }
-    }
-
-    // Export Collection Sheet (Legal PDF) Dialog
-    if (showExportPdfDateDialog) {
-        AlertDialog(
-            onDismissRequest = { showExportPdfDateDialog = false },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.PictureAsPdf,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Export Collection Sheet")
-                }
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        text = "Generates a printable collection ledger formatted for US Legal Paper (8.5 × 14 in) with 2 side-by-side columns and 7 empty boxes per customer for daily handwriting.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    OutlinedTextField(
-                        value = dateFormat.format(Date(exportPdfDateMillis)),
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Date on Sheet") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    TextButton(
-                        onClick = { showExportDatePicker = true },
-                        modifier = Modifier.align(Alignment.End)
-                    ) {
-                        Text("Change Date")
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Active balances only", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                            Text("Only include customers with balance > ₹0", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Switch(
-                            checked = exportOnlyActiveBalances,
-                            onCheckedChange = { exportOnlyActiveBalances = it }
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = {
-                        val activeLoansMap = activeLoans.associateBy { it.personId }
-                        val rows = persons.mapNotNull { p ->
-                            val loan = activeLoansMap[p.id]
-                            val bal = loan?.balance ?: 0.0
-                            if (!exportOnlyActiveBalances || bal > 0) {
-                                CollectionSheetRow(customerName = p.name, balance = bal)
-                            } else null
-                        }
-                        if (rows.isEmpty()) {
-                            scope.launch { snackbarHostState.showSnackbar("No customers found to export.") }
-                        } else {
-                            try {
-                                val file = CollectionSheetPdfGenerator.generatePdf(
-                                    context = context,
-                                    fileName = displayName,
-                                    dateMillis = exportPdfDateMillis,
-                                    rows = rows
-                                )
-                                CollectionSheetPdfGenerator.printPdf(context, file, "Collection_Sheet_$displayName")
-                                showExportPdfDateDialog = false
-                            } catch (e: Exception) {
-                                scope.launch { snackbarHostState.showSnackbar("Print error: ${e.message}") }
-                            }
-                        }
-                    }) {
-                        Text("Print")
-                    }
-
-                    Button(onClick = {
-                        val activeLoansMap = activeLoans.associateBy { it.personId }
-                        val rows = persons.mapNotNull { p ->
-                            val loan = activeLoansMap[p.id]
-                            val bal = loan?.balance ?: 0.0
-                            if (!exportOnlyActiveBalances || bal > 0) {
-                                CollectionSheetRow(customerName = p.name, balance = bal)
-                            } else null
-                        }
-                        if (rows.isEmpty()) {
-                            scope.launch { snackbarHostState.showSnackbar("No customers found to export.") }
-                        } else {
-                            try {
-                                val file = CollectionSheetPdfGenerator.generatePdf(
-                                    context = context,
-                                    fileName = displayName,
-                                    dateMillis = exportPdfDateMillis,
-                                    rows = rows
-                                )
-                                CollectionSheetPdfGenerator.shareOrOpenPdf(
-                                    context = context,
-                                    pdfFile = file,
-                                    title = "Collection Sheet - $displayName"
-                                )
-                                scope.launch { snackbarHostState.showSnackbar("Collection sheet generated (${rows.size} customers)!") }
-                                showExportPdfDateDialog = false
-                            } catch (e: Exception) {
-                                scope.launch { snackbarHostState.showSnackbar("Export error: ${e.message}") }
-                            }
-                        }
-                    }) {
-                        Text("Export PDF")
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showExportPdfDateDialog = false }) {
-                    Text("Cancel")
-                }
+    // Export Collection Sheet (Legal PDF) Dialog - Owner Only
+    if (isOwner && showExportPdfDateDialog) {
+        ExportCollectionSheetDialog(
+            fileId = fileId,
+            fileName = displayName,
+            onDismiss = { showExportPdfDateDialog = false },
+            onError = { msg ->
+                scope.launch { snackbarHostState.showSnackbar(msg) }
             }
         )
     }
