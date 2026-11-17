@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 30,
-  "latestVersionName": "1.0.30",
+  "latestVersionCode": 31,
+  "latestVersionName": "1.0.31",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Clarity overhaul for Pending Approvals cards with customer names, old vs new amount diffs, worker usernames, and complete proposal dialog wiring for payment and loan amount edits."
+  "changelog": "Activity History clarity with plain-language details and customer context, plus Export Collection Sheet as PDF formatted for US Legal paper with 2-column daily collection boxes."
 }

@@ -317,13 +317,22 @@ class WorkerRepository @Inject constructor(
                 )
             )
 
+            val workerLabel = if (worker.displayName.isNotBlank()) "${worker.displayName} (@${worker.username})" else "@${worker.username}"
+            val privSummary = buildString {
+                append("Permissions updated for $workerLabel: ")
+                append("Record Payments: ${if (canRecordPayments) "Allowed" else "Disabled"} • ")
+                append("Create Loans: ${if (canCreateLoansDirectly) "Allowed" else "Needs Approval"} • ")
+                append("Edit Loans: ${if (canEditLoansDirectly) "Allowed" else "Needs Approval"} • ")
+                append("Delete: ${if (canDeleteRecords) "Allowed" else "Blocked"}")
+            }
+
             activityLogRepository.logActivity(
                 businessId = businessId,
                 actorId = ownerActorId,
                 actorName = ownerActorName,
                 actorRole = UserRole.OWNER,
                 action = "WORKER_PRIVILEGES_UPDATED",
-                details = "Updated privileges for worker '${worker.username}': RecordPayments=$canRecordPayments, DirectCreate=$canCreateLoansDirectly, DirectEdit=$canEditLoansDirectly, Delete=$canDeleteRecords, AllFiles=$accessAllFiles",
+                details = privSummary,
                 recordType = "WORKER",
                 recordSharedId = workerUid,
                 outcome = "SUCCESS"

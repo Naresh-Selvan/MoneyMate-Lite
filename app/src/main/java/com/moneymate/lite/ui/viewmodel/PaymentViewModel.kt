@@ -39,6 +39,10 @@ class PaymentViewModel @Inject constructor(
         val bizId = authManager.businessId.value
         val isOnline = syncManager.isOnline.value
 
+        val customerName = loanRepository.getCustomerNameForLoan(loanId) ?: "Customer"
+        val fileName = loanRepository.getFileNameForLoan(loanId) ?: ""
+        val fileInfo = if (fileName.isNotBlank()) " in file '$fileName'" else ""
+
         if (role == UserRole.WORKER && user != null) {
             val syncStatus = if (isOnline) "SYNCED" else "PENDING_SYNC"
             val effectiveName = authManager.getEffectiveUserName()
@@ -56,7 +60,10 @@ class PaymentViewModel @Inject constructor(
                 actorName = effectiveName,
                 actorRole = UserRole.WORKER,
                 action = "PAYMENT_RECORDED",
-                details = "Recorded payment of ₹$amount ($syncStatus)",
+                details = "Recorded payment of ₹${"%.0f".format(amount)} for customer '$customerName'$fileInfo",
+                fileName = fileName.takeIf { it.isNotBlank() },
+                recordType = "PAYMENT",
+                recordSharedId = loanId.toString(),
                 outcome = "SUCCESS"
             )
             if (isOnline) {
@@ -73,7 +80,10 @@ class PaymentViewModel @Inject constructor(
                     actorName = authManager.getEffectiveUserName(),
                     actorRole = UserRole.OWNER,
                     action = "PAYMENT_RECORDED",
-                    details = "Recorded payment of ₹$amount",
+                    details = "Recorded payment of ₹${"%.0f".format(amount)} for customer '$customerName'$fileInfo",
+                    fileName = fileName.takeIf { it.isNotBlank() },
+                    recordType = "PAYMENT",
+                    recordSharedId = loanId.toString(),
                     outcome = "SUCCESS"
                 )
             }

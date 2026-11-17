@@ -96,6 +96,9 @@ class LoanViewModel @Inject constructor(
         }
         return try {
             val id = repository.createLoan(personId, totalAmount, dateGiven)
+            val customerName = repository.getCustomerNameForPerson(personId) ?: "Customer"
+            val fileName = repository.getFileNameForPerson(personId) ?: ""
+            val fileInfo = if (fileName.isNotBlank()) " in file '$fileName'" else ""
             authManager.currentUser.value?.let { user ->
                 activityLogRepository.logActivity(
                     businessId = authManager.businessId.value,
@@ -105,7 +108,8 @@ class LoanViewModel @Inject constructor(
                     action = "LOAN_CREATED",
                     recordType = "LOAN",
                     recordSharedId = id.toString(),
-                    details = "Created new loan of ₹$totalAmount",
+                    fileName = fileName.takeIf { it.isNotBlank() },
+                    details = "Created new loan of ₹${"%.0f".format(totalAmount)} for customer '$customerName'$fileInfo",
                     outcome = "SUCCESS"
                 )
             }
@@ -126,6 +130,9 @@ class LoanViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val payment = repository.getPaymentById(id)
+                val customerName = repository.getCustomerNameForPayment(id) ?: "Customer"
+                val fileName = repository.getFileNameForPayment(id) ?: ""
+                val fileInfo = if (fileName.isNotBlank()) " in file '$fileName'" else ""
                 repository.softDeletePayment(id)
                 authManager.currentUser.value?.let { user ->
                     activityLogRepository.logActivity(
@@ -136,7 +143,8 @@ class LoanViewModel @Inject constructor(
                         action = "PAYMENT_DELETED",
                         recordType = "PAYMENT",
                         recordSharedId = payment?.sharedId ?: id.toString(),
-                        details = "Deleted payment of ₹${payment?.amount}",
+                        fileName = fileName.takeIf { it.isNotBlank() },
+                        details = "Deleted payment of ₹${"%.0f".format(payment?.amount ?: 0.0)} for customer '$customerName'$fileInfo (Moved to Recently Deleted)",
                         outcome = "SUCCESS"
                     )
                 }
@@ -236,6 +244,9 @@ class LoanViewModel @Inject constructor(
         }
         return try {
             val oldLoan = repository.getLoanById(loanId)
+            val customerName = repository.getCustomerNameForLoan(loanId) ?: "Customer"
+            val fileName = repository.getFileNameForLoan(loanId) ?: ""
+            val fileInfo = if (fileName.isNotBlank()) " in file '$fileName'" else ""
             repository.updateLoanAmount(loanId, newAmount)
             authManager.currentUser.value?.let { user ->
                 activityLogRepository.logActivity(
@@ -246,7 +257,8 @@ class LoanViewModel @Inject constructor(
                     action = "LOAN_UPDATED",
                     recordType = "LOAN",
                     recordSharedId = oldLoan?.sharedId ?: loanId.toString(),
-                    details = "Updated loan amount from ₹${oldLoan?.totalAmount} to ₹$newAmount",
+                    fileName = fileName.takeIf { it.isNotBlank() },
+                    details = "Updated loan amount from ₹${"%.0f".format(oldLoan?.totalAmount ?: 0.0)} to ₹${"%.0f".format(newAmount)} for customer '$customerName'$fileInfo",
                     outcome = "SUCCESS"
                 )
             }
@@ -264,6 +276,9 @@ class LoanViewModel @Inject constructor(
         }
         return try {
             val oldLoan = repository.getLoanById(loanId)
+            val customerName = repository.getCustomerNameForLoan(loanId) ?: "Customer"
+            val fileName = repository.getFileNameForLoan(loanId) ?: ""
+            val fileInfo = if (fileName.isNotBlank()) " in file '$fileName'" else ""
             repository.updateLoan(loanId, newAmount, newDate)
             authManager.currentUser.value?.let { user ->
                 activityLogRepository.logActivity(
@@ -274,7 +289,8 @@ class LoanViewModel @Inject constructor(
                     action = "LOAN_UPDATED",
                     recordType = "LOAN",
                     recordSharedId = oldLoan?.sharedId ?: loanId.toString(),
-                    details = "Updated loan from ₹${oldLoan?.totalAmount} to ₹$newAmount",
+                    fileName = fileName.takeIf { it.isNotBlank() },
+                    details = "Updated loan from ₹${"%.0f".format(oldLoan?.totalAmount ?: 0.0)} to ₹${"%.0f".format(newAmount)} for customer '$customerName'$fileInfo",
                     outcome = "SUCCESS"
                 )
             }
@@ -292,6 +308,9 @@ class LoanViewModel @Inject constructor(
         }
         return try {
             val oldPayment = repository.getPaymentById(paymentId)
+            val customerName = repository.getCustomerNameForPayment(paymentId) ?: "Customer"
+            val fileName = repository.getFileNameForPayment(paymentId) ?: ""
+            val fileInfo = if (fileName.isNotBlank()) " in file '$fileName'" else ""
             repository.updatePaymentAmount(paymentId, newAmount)
             authManager.currentUser.value?.let { user ->
                 activityLogRepository.logActivity(
@@ -302,7 +321,8 @@ class LoanViewModel @Inject constructor(
                     action = "PAYMENT_UPDATED",
                     recordType = "PAYMENT",
                     recordSharedId = oldPayment?.sharedId ?: paymentId.toString(),
-                    details = "Updated payment from ₹${oldPayment?.amount} to ₹$newAmount",
+                    fileName = fileName.takeIf { it.isNotBlank() },
+                    details = "Updated payment from ₹${"%.0f".format(oldPayment?.amount ?: 0.0)} to ₹${"%.0f".format(newAmount)} for customer '$customerName'$fileInfo",
                     outcome = "SUCCESS"
                 )
             }
@@ -320,6 +340,9 @@ class LoanViewModel @Inject constructor(
         }
         return try {
             val oldPayment = repository.getPaymentById(paymentId)
+            val customerName = repository.getCustomerNameForPayment(paymentId) ?: "Customer"
+            val fileName = repository.getFileNameForPayment(paymentId) ?: ""
+            val fileInfo = if (fileName.isNotBlank()) " in file '$fileName'" else ""
             repository.updatePayment(paymentId, newAmount, newDate)
             authManager.currentUser.value?.let { user ->
                 activityLogRepository.logActivity(
@@ -330,7 +353,8 @@ class LoanViewModel @Inject constructor(
                     action = "PAYMENT_UPDATED",
                     recordType = "PAYMENT",
                     recordSharedId = oldPayment?.sharedId ?: paymentId.toString(),
-                    details = "Updated payment from ₹${oldPayment?.amount} to ₹$newAmount",
+                    fileName = fileName.takeIf { it.isNotBlank() },
+                    details = "Updated payment from ₹${"%.0f".format(oldPayment?.amount ?: 0.0)} to ₹${"%.0f".format(newAmount)} for customer '$customerName'$fileInfo",
                     outcome = "SUCCESS"
                 )
             }
@@ -351,6 +375,9 @@ class LoanViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val loan = repository.getLoanById(id)
+                val customerName = repository.getCustomerNameForLoan(id) ?: "Customer"
+                val fileName = repository.getFileNameForLoan(id) ?: ""
+                val fileInfo = if (fileName.isNotBlank()) " in file '$fileName'" else ""
                 repository.softDeleteLoan(id)
                 authManager.currentUser.value?.let { user ->
                     activityLogRepository.logActivity(
@@ -361,7 +388,8 @@ class LoanViewModel @Inject constructor(
                         action = "LOAN_DELETED",
                         recordType = "LOAN",
                         recordSharedId = loan?.sharedId ?: id.toString(),
-                        details = "Deleted loan of ₹${loan?.totalAmount}",
+                        fileName = fileName.takeIf { it.isNotBlank() },
+                        details = "Deleted loan of ₹${"%.0f".format(loan?.totalAmount ?: 0.0)} for customer '$customerName'$fileInfo (Moved to Recently Deleted)",
                         outcome = "SUCCESS"
                     )
                 }

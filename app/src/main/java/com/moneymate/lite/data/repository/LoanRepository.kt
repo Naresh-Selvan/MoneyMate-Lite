@@ -316,4 +316,33 @@ class LoanRepository @Inject constructor(
     suspend fun getPaymentById(id: Long): Payment? = withContext(Dispatchers.IO) {
         paymentDao.getPaymentById(id)
     }
+
+    suspend fun getCustomerNameForLoan(loanId: Long): String? = withContext(Dispatchers.IO) {
+        val loan = loanDao.getLoanById(loanId) ?: return@withContext null
+        database.personDao().getPersonById(loan.personId)?.name
+    }
+
+    suspend fun getCustomerNameForPayment(paymentId: Long): String? = withContext(Dispatchers.IO) {
+        val payment = paymentDao.getPaymentById(paymentId) ?: return@withContext null
+        getCustomerNameForLoan(payment.loanId)
+    }
+
+    suspend fun getCustomerNameForPerson(personId: Long): String? = withContext(Dispatchers.IO) {
+        database.personDao().getPersonById(personId)?.name
+    }
+
+    suspend fun getFileNameForPerson(personId: Long): String? = withContext(Dispatchers.IO) {
+        val person = database.personDao().getPersonById(personId) ?: return@withContext null
+        database.loanFileDao().getFileById(person.fileId)?.name
+    }
+
+    suspend fun getFileNameForLoan(loanId: Long): String? = withContext(Dispatchers.IO) {
+        val loan = loanDao.getLoanById(loanId) ?: return@withContext null
+        getFileNameForPerson(loan.personId)
+    }
+
+    suspend fun getFileNameForPayment(paymentId: Long): String? = withContext(Dispatchers.IO) {
+        val payment = paymentDao.getPaymentById(paymentId) ?: return@withContext null
+        getFileNameForLoan(payment.loanId)
+    }
 }
