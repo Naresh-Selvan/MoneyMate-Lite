@@ -308,4 +308,12 @@ class LoanRepository @Inject constructor(
             paymentDao.softDeletePaymentsForLoan(id)
         }
     }
+
+    suspend fun getLoanById(id: Long): Loan? = withContext(Dispatchers.IO) {
+        loanDao.getLoanById(id)
+    }
+
+    suspend fun getPaymentById(id: Long): Payment? = withContext(Dispatchers.IO) {
+        paymentDao.getPaymentById(id)
+    }
 }

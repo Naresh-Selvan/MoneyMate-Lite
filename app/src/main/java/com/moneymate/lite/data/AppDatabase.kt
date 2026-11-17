@@ -29,7 +29,7 @@ import com.moneymate.lite.data.entity.WorkerProfileEntity
         ActivityLogEntity::class,
         WorkerProfileEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -145,10 +145,23 @@ abstract class AppDatabase : RoomDatabase() {
                         allowedFileIdsJson TEXT NOT NULL,
                         isActive INTEGER NOT NULL,
                         mustChangePassword INTEGER NOT NULL,
+                        canRecordPayments INTEGER NOT NULL DEFAULT 1,
+                        canCreateLoansDirectly INTEGER NOT NULL DEFAULT 0,
+                        canEditLoansDirectly INTEGER NOT NULL DEFAULT 0,
+                        canDeleteRecords INTEGER NOT NULL DEFAULT 0,
                         createdAt INTEGER NOT NULL,
                         updatedAt INTEGER NOT NULL
                     )
                 """.trimIndent())
+            }
+        }
+
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE worker_profiles ADD COLUMN canRecordPayments INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE worker_profiles ADD COLUMN canCreateLoansDirectly INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE worker_profiles ADD COLUMN canEditLoansDirectly INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE worker_profiles ADD COLUMN canDeleteRecords INTEGER NOT NULL DEFAULT 0")
             }
         }
     }

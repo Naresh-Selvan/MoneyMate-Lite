@@ -4,6 +4,7 @@ import android.content.Context
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.FirebaseFirestore
+import com.moneymate.lite.data.repository.ActivityLogRepository
 import com.moneymate.lite.data.dao.ActivityLogDao
 import com.moneymate.lite.data.dao.ApprovalRequestDao
 import com.moneymate.lite.data.dao.LoanDao
@@ -35,11 +36,13 @@ class AuthManager @Inject constructor(
     private val paymentDao: PaymentDao,
     private val approvalRequestDao: ApprovalRequestDao,
     private val activityLogDao: ActivityLogDao,
-    private val workerProfileDao: WorkerProfileDao
+    private val workerProfileDao: WorkerProfileDao,
+    private val activityLogRepository: ActivityLogRepository
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val auth = FirebaseAuth.getInstance()
     private val prefs = context.getSharedPreferences("moneymate_auth_prefs", Context.MODE_PRIVATE)
+    private var userProfileListener: com.google.firebase.firestore.ListenerRegistration? = null
 
     private val _currentUser = MutableStateFlow(auth.currentUser)
     val currentUser: StateFlow<FirebaseUser?> = _currentUser.asStateFlow()
@@ -107,6 +110,7 @@ class AuthManager @Inject constructor(
 
                 @Suppress("UNCHECKED_CAST")
                 val allowedFiles = (userDoc.get("allowedFileIds") as? List<String>) ?: emptyList()
+                val isOwner = role == UserRole.OWNER
                 val profile = UserProfile(
                     uid = user.uid,
                     businessId = bizId,
@@ -114,8 +118,12 @@ class AuthManager @Inject constructor(
                     displayName = userDoc.getString("displayName") ?: user.displayName ?: "",
                     username = userDoc.getString("username") ?: "",
                     email = userDoc.getString("email") ?: user.email ?: "",
-                    accessAllFiles = userDoc.getBoolean("accessAllFiles") ?: (role == UserRole.OWNER),
+                    accessAllFiles = userDoc.getBoolean("accessAllFiles") ?: isOwner,
                     allowedFileIds = allowedFiles,
+                    canRecordPayments = if (isOwner) true else (userDoc.getBoolean("canRecordPayments") ?: true),
+                    canCreateLoansDirectly = if (isOwner) true else (userDoc.getBoolean("canCreateLoansDirectly") ?: false),
+                    canEditLoansDirectly = if (isOwner) true else (userDoc.getBoolean("canEditLoansDirectly") ?: false),
+                    canDeleteRecords = if (isOwner) true else (userDoc.getBoolean("canDeleteRecords") ?: false),
                     isActive = active,
                     mustChangePassword = mustChange,
                     createdAt = userDoc.getLong("createdAt") ?: System.currentTimeMillis(),
@@ -127,6 +135,7 @@ class AuthManager @Inject constructor(
                 _businessId.value = bizId
                 _isPasswordChangeRequired.value = mustChange
                 prefs.edit().putString("key_business_id", bizId).apply()
+                startUserProfileListener(user.uid)
             } else {
                 val bizId = "biz_${user.uid}"
                 val now = System.currentTimeMillis()
@@ -139,6 +148,10 @@ class AuthManager @Inject constructor(
                     email = user.email ?: "",
                     accessAllFiles = true,
                     allowedFileIds = emptyList(),
+                    canRecordPayments = true,
+                    canCreateLoansDirectly = true,
+                    canEditLoansDirectly = true,
+                    canDeleteRecords = true,
                     isActive = true,
                     mustChangePassword = false,
                     createdAt = now,
@@ -154,6 +167,10 @@ class AuthManager @Inject constructor(
                     "email" to ownerProfile.email,
                     "accessAllFiles" to true,
                     "allowedFileIds" to emptyList<String>(),
+                    "canRecordPayments" to true,
+                    "canCreateLoansDirectly" to true,
+                    "canEditLoansDirectly" to true,
+                    "canDeleteRecords" to true,
                     "isActive" to true,
                     "mustChangePassword" to false,
                     "createdAt" to now,
@@ -179,6 +196,7 @@ class AuthManager @Inject constructor(
                 _businessId.value = bizId
                 _isPasswordChangeRequired.value = false
                 prefs.edit().putString("key_business_id", bizId).apply()
+                startUserProfileListener(user.uid)
             }
         } catch (e: Exception) {
             val cachedWorker = workerProfileDao.getWorkerById(user.uid)
@@ -216,10 +234,58 @@ class AuthManager @Inject constructor(
             val email = usernameDoc.getString("email")
                 ?: return@withContext Result.failure(IllegalStateException("Worker email record not found"))
 
-            auth.signInWithEmailAndPassword(email, password).await()
+            val authResult = auth.signInWithEmailAndPassword(email, password).await()
+            val workerUser = authResult.user
+            val bizId = usernameDoc.getString("businessId") ?: ""
+            if (workerUser != null && bizId.isNotBlank()) {
+                activityLogRepository.logActivity(
+                    businessId = bizId,
+                    actorId = workerUser.uid,
+                    actorName = cleanUsername,
+                    actorRole = UserRole.WORKER,
+                    action = "WORKER_LOGIN",
+                    details = "Worker '$cleanUsername' signed in successfully",
+                    outcome = "SUCCESS"
+                )
+            }
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    private fun startUserProfileListener(uid: String) {
+        userProfileListener?.remove()
+        val db = FirebaseFirestore.getInstance()
+        userProfileListener = db.collection("users").document(uid).addSnapshotListener { snapshot, error ->
+            if (error != null || snapshot == null || !snapshot.exists()) return@addSnapshotListener
+            val active = snapshot.getBoolean("isActive") ?: true
+            val roleStr = snapshot.getString("role") ?: "WORKER"
+            val role = if (roleStr == "OWNER") UserRole.OWNER else UserRole.WORKER
+            val isOwner = role == UserRole.OWNER
+            if (!active && role == UserRole.WORKER) {
+                scope.launch(Dispatchers.Main) {
+                    _authError.value = "Your account has been deactivated by the owner."
+                    signOut()
+                }
+                return@addSnapshotListener
+            }
+            @Suppress("UNCHECKED_CAST")
+            val allowedFiles = (snapshot.get("allowedFileIds") as? List<String>) ?: emptyList()
+            val updated = _currentProfile.value?.copy(
+                displayName = snapshot.getString("displayName") ?: _currentProfile.value?.displayName ?: "",
+                accessAllFiles = snapshot.getBoolean("accessAllFiles") ?: isOwner,
+                allowedFileIds = allowedFiles,
+                canRecordPayments = if (isOwner) true else (snapshot.getBoolean("canRecordPayments") ?: true),
+                canCreateLoansDirectly = if (isOwner) true else (snapshot.getBoolean("canCreateLoansDirectly") ?: false),
+                canEditLoansDirectly = if (isOwner) true else (snapshot.getBoolean("canEditLoansDirectly") ?: false),
+                canDeleteRecords = if (isOwner) true else (snapshot.getBoolean("canDeleteRecords") ?: false),
+                isActive = active,
+                mustChangePassword = snapshot.getBoolean("mustChangePassword") ?: false
+            )
+            if (updated != null) {
+                _currentProfile.value = updated
+            }
         }
     }
 
@@ -252,6 +318,8 @@ class AuthManager @Inject constructor(
     }
 
     fun signOut() {
+        userProfileListener?.remove()
+        userProfileListener = null
         auth.signOut()
         setOfflineMode(false)
         _currentProfile.value = null

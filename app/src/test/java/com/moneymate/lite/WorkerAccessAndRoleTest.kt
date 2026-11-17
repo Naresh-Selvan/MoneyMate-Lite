@@ -128,4 +128,41 @@ class WorkerAccessAndRoleTest {
 
         assertTrue(newWorker.mustChangePassword)
     }
+
+    @Test
+    fun `default worker can record payments but has destructive privileges locked`() {
+        val worker = UserProfile(
+            uid = "worker_default",
+            businessId = "biz_123",
+            role = UserRole.WORKER,
+            displayName = "Field Collector",
+            username = "collector"
+        )
+
+        // Default security policies
+        assertTrue("Workers should be allowed to record collections by default", worker.canRecordPayments)
+        assertFalse("Workers must NOT be allowed to directly edit loans without approval", worker.canEditLoansDirectly)
+        assertFalse("Workers must NOT be allowed to directly create loans without approval", worker.canCreateLoansDirectly)
+        assertFalse("Workers must NOT be allowed to delete records", worker.canDeleteRecords)
+    }
+
+    @Test
+    fun `trusted worker with elevated privileges has direct edit enabled`() {
+        val trustedManager = UserProfile(
+            uid = "worker_senior",
+            businessId = "biz_123",
+            role = UserRole.WORKER,
+            displayName = "Senior Manager",
+            username = "seniormgr",
+            canRecordPayments = true,
+            canCreateLoansDirectly = true,
+            canEditLoansDirectly = true,
+            canDeleteRecords = false
+        )
+
+        assertTrue(trustedManager.canRecordPayments)
+        assertTrue(trustedManager.canCreateLoansDirectly)
+        assertTrue(trustedManager.canEditLoansDirectly)
+        assertFalse("Delete records remains restricted", trustedManager.canDeleteRecords)
+    }
 }

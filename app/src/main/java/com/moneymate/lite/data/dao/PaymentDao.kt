@@ -59,6 +59,24 @@ interface PaymentDao {
     @Query("UPDATE payments SET isDeleted = 1, lastModified = :modified WHERE id = :id")
     suspend fun softDelete(id: Long, modified: Long = System.currentTimeMillis())
 
+    @Query("""
+        SELECT COALESCE(SUM(amount), 0.0) 
+        FROM payments 
+        WHERE recordedByWorkerId = :workerUid 
+          AND date >= :startOfDay 
+          AND isDeleted = 0
+    """)
+    fun getTodayCollectionsByWorker(workerUid: String, startOfDay: Long): Flow<Double>
+
+    @Query("""
+        SELECT COUNT(*) 
+        FROM payments 
+        WHERE recordedByWorkerId = :workerUid 
+          AND date >= :startOfDay 
+          AND isDeleted = 0
+    """)
+    fun getTodayPaymentCountByWorker(workerUid: String, startOfDay: Long): Flow<Int>
+
     @Query("UPDATE payments SET isDeleted = 1, lastModified = :modified WHERE sharedId = :sharedId")
     suspend fun softDeleteBySharedId(sharedId: String, modified: Long = System.currentTimeMillis())
 

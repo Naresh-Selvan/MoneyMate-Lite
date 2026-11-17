@@ -4,6 +4,7 @@ import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.moneymate.lite.data.dao.PaymentDao
 import com.moneymate.lite.data.dao.WorkerProfileDao
 import com.moneymate.lite.data.entity.WorkerProfileEntity
 import com.moneymate.lite.data.model.UserRole
@@ -20,10 +21,17 @@ import javax.inject.Singleton
 class WorkerRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val workerProfileDao: WorkerProfileDao,
+    private val paymentDao: PaymentDao,
     private val activityLogRepository: ActivityLogRepository
 ) {
     fun getAllWorkersFlow(businessId: String): Flow<List<WorkerProfileEntity>> =
         workerProfileDao.getAllWorkersFlow(businessId)
+
+    fun getTodayCollectionsForWorker(workerUid: String, startOfDay: Long): Flow<Double> =
+        paymentDao.getTodayCollectionsByWorker(workerUid, startOfDay)
+
+    fun getTodayPaymentCountForWorker(workerUid: String, startOfDay: Long): Flow<Int> =
+        paymentDao.getTodayPaymentCountByWorker(workerUid, startOfDay)
 
     suspend fun getWorkerById(uid: String): WorkerProfileEntity? = withContext(Dispatchers.IO) {
         workerProfileDao.getWorkerById(uid)
@@ -94,6 +102,10 @@ class WorkerRepository @Inject constructor(
                 "email" to workerEmail,
                 "accessAllFiles" to accessAllFiles,
                 "allowedFileIds" to allowedFileIds,
+                "canRecordPayments" to true,
+                "canCreateLoansDirectly" to false,
+                "canEditLoansDirectly" to false,
+                "canDeleteRecords" to false,
                 "isActive" to true,
                 "mustChangePassword" to true,
                 "createdAt" to now,
@@ -127,6 +139,10 @@ class WorkerRepository @Inject constructor(
                 email = workerEmail,
                 accessAllFiles = accessAllFiles,
                 allowedFileIdsJson = allowedJson,
+                canRecordPayments = true,
+                canCreateLoansDirectly = false,
+                canEditLoansDirectly = false,
+                canDeleteRecords = false,
                 isActive = true,
                 mustChangePassword = true,
                 createdAt = now,
@@ -256,11 +272,15 @@ class WorkerRepository @Inject constructor(
         }
     }
 
-    suspend fun updateWorkerFileAccess(
+    suspend fun updateWorkerPrivileges(
         businessId: String,
         workerUid: String,
         accessAllFiles: Boolean,
         allowedFileIds: List<String>,
+        canRecordPayments: Boolean,
+        canCreateLoansDirectly: Boolean,
+        canEditLoansDirectly: Boolean,
+        canDeleteRecords: Boolean,
         ownerActorId: String,
         ownerActorName: String
     ): Result<Unit> = withContext(Dispatchers.IO) {
@@ -273,6 +293,10 @@ class WorkerRepository @Inject constructor(
             val updates = hashMapOf<String, Any>(
                 "accessAllFiles" to accessAllFiles,
                 "allowedFileIds" to allowedFileIds,
+                "canRecordPayments" to canRecordPayments,
+                "canCreateLoansDirectly" to canCreateLoansDirectly,
+                "canEditLoansDirectly" to canEditLoansDirectly,
+                "canDeleteRecords" to canDeleteRecords,
                 "updatedAt" to now
             )
 
@@ -285,6 +309,10 @@ class WorkerRepository @Inject constructor(
                 worker.copy(
                     accessAllFiles = accessAllFiles,
                     allowedFileIdsJson = allowedJson,
+                    canRecordPayments = canRecordPayments,
+                    canCreateLoansDirectly = canCreateLoansDirectly,
+                    canEditLoansDirectly = canEditLoansDirectly,
+                    canDeleteRecords = canDeleteRecords,
                     updatedAt = now
                 )
             )
@@ -294,8 +322,8 @@ class WorkerRepository @Inject constructor(
                 actorId = ownerActorId,
                 actorName = ownerActorName,
                 actorRole = UserRole.OWNER,
-                action = "WORKER_PERMISSIONS_CHANGED",
-                details = "Updated file access for worker '${worker.username}' (accessAllFiles=$accessAllFiles, count=${allowedFileIds.size})",
+                action = "WORKER_PRIVILEGES_UPDATED",
+                details = "Updated privileges for worker '${worker.username}': RecordPayments=$canRecordPayments, DirectCreate=$canCreateLoansDirectly, DirectEdit=$canEditLoansDirectly, Delete=$canDeleteRecords, AllFiles=$accessAllFiles",
                 recordType = "WORKER",
                 recordSharedId = workerUid,
                 outcome = "SUCCESS"
@@ -306,6 +334,26 @@ class WorkerRepository @Inject constructor(
             Result.failure(e)
         }
     }
+
+    suspend fun updateWorkerFileAccess(
+        businessId: String,
+        workerUid: String,
+        accessAllFiles: Boolean,
+        allowedFileIds: List<String>,
+        ownerActorId: String,
+        ownerActorName: String
+    ): Result<Unit> = updateWorkerPrivileges(
+        businessId = businessId,
+        workerUid = workerUid,
+        accessAllFiles = accessAllFiles,
+        allowedFileIds = allowedFileIds,
+        canRecordPayments = workerProfileDao.getWorkerById(workerUid)?.canRecordPayments ?: true,
+        canCreateLoansDirectly = workerProfileDao.getWorkerById(workerUid)?.canCreateLoansDirectly ?: false,
+        canEditLoansDirectly = workerProfileDao.getWorkerById(workerUid)?.canEditLoansDirectly ?: false,
+        canDeleteRecords = workerProfileDao.getWorkerById(workerUid)?.canDeleteRecords ?: false,
+        ownerActorId = ownerActorId,
+        ownerActorName = ownerActorName
+    )
 
     suspend fun refreshWorkersFromCloud(businessId: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
@@ -323,6 +371,10 @@ class WorkerRepository @Inject constructor(
                 val accessAll = doc.getBoolean("accessAllFiles") ?: true
                 @Suppress("UNCHECKED_CAST")
                 val files = doc.get("allowedFileIds") as? List<String> ?: emptyList()
+                val canRecord = doc.getBoolean("canRecordPayments") ?: true
+                val canCreate = doc.getBoolean("canCreateLoansDirectly") ?: false
+                val canEdit = doc.getBoolean("canEditLoansDirectly") ?: false
+                val canDelete = doc.getBoolean("canDeleteRecords") ?: false
                 val active = doc.getBoolean("isActive") ?: true
                 val mustChange = doc.getBoolean("mustChangePassword") ?: false
                 val created = doc.getLong("createdAt") ?: System.currentTimeMillis()
@@ -337,6 +389,10 @@ class WorkerRepository @Inject constructor(
                         email = email,
                         accessAllFiles = accessAll,
                         allowedFileIdsJson = JSONArray(files).toString(),
+                        canRecordPayments = canRecord,
+                        canCreateLoansDirectly = canCreate,
+                        canEditLoansDirectly = canEdit,
+                        canDeleteRecords = canDelete,
                         isActive = active,
                         mustChangePassword = mustChange,
                         createdAt = created,

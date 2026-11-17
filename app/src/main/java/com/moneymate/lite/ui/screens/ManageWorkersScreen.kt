@@ -21,7 +21,14 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Security
+import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -80,7 +87,7 @@ fun ManageWorkersScreen(
 
     var showAddDialog by remember { mutableStateOf(false) }
     var workerToResetPassword by remember { mutableStateOf<WorkerProfileEntity?>(null) }
-    var workerToEditAccess by remember { mutableStateOf<WorkerProfileEntity?>(null) }
+    var workerToEditPrivileges by remember { mutableStateOf<WorkerProfileEntity?>(null) }
 
     Scaffold(
         topBar = {
@@ -147,8 +154,9 @@ fun ManageWorkersScreen(
                     WorkerCard(
                         worker = worker,
                         allFiles = allFiles,
+                        viewModel = viewModel,
                         onResetPassword = { workerToResetPassword = worker },
-                        onEditAccess = { workerToEditAccess = worker },
+                        onEditPrivileges = { workerToEditPrivileges = worker },
                         onToggleStatus = {
                             val newStatus = !worker.isActive
                             viewModel.toggleWorkerStatus(
@@ -215,19 +223,23 @@ fun ManageWorkersScreen(
         )
     }
 
-    workerToEditAccess?.let { worker ->
-        EditFileAccessDialog(
+    workerToEditPrivileges?.let { worker ->
+        EditWorkerPrivilegesDialog(
             worker = worker,
             allFiles = allFiles,
-            onDismiss = { workerToEditAccess = null },
-            onConfirm = { accessAll, selectedFiles ->
-                viewModel.updateWorkerFileAccess(
+            onDismiss = { workerToEditPrivileges = null },
+            onConfirm = { accessAll, selectedFiles, canRecord, canCreate, canEdit, canDelete ->
+                viewModel.updateWorkerPrivileges(
                     workerUid = worker.uid,
                     accessAllFiles = accessAll,
                     allowedFileIds = selectedFiles,
+                    canRecordPayments = canRecord,
+                    canCreateLoansDirectly = canCreate,
+                    canEditLoansDirectly = canEdit,
+                    canDeleteRecords = canDelete,
                     onSuccess = {
-                        workerToEditAccess = null
-                        scope.launch { snackbarHostState.showSnackbar("Permissions updated!") }
+                        workerToEditPrivileges = null
+                        scope.launch { snackbarHostState.showSnackbar("Privileges updated successfully!") }
                     },
                     onError = { err ->
                         scope.launch { snackbarHostState.showSnackbar("Error: $err") }
@@ -242,11 +254,15 @@ fun ManageWorkersScreen(
 private fun WorkerCard(
     worker: WorkerProfileEntity,
     allFiles: List<LoanFile>,
+    viewModel: WorkerViewModel,
     onResetPassword: () -> Unit,
-    onEditAccess: () -> Unit,
+    onEditPrivileges: () -> Unit,
     onToggleStatus: () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
+
+    val todayCollections by viewModel.getTodayCollectionsFlow(worker.uid).collectAsState(initial = 0.0)
+    val todayPaymentCount by viewModel.getTodayCountFlow(worker.uid).collectAsState(initial = 0)
 
     val accessSummary = remember(worker.accessAllFiles, worker.allowedFileIdsJson, allFiles) {
         if (worker.accessAllFiles) {
@@ -268,96 +284,152 @@ private fun WorkerCard(
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .padding(16.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = worker.displayName,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.size(8.dp))
-                    if (worker.isActive) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "Active",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF2E7D32)
-                        )
-                    } else {
-                        Text(
-                            text = "Disabled",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.error,
+                            text = worker.displayName,
+                            style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.size(8.dp))
+                        if (worker.isActive) {
+                            Text(
+                                text = "Active",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF2E7D32)
+                            )
+                        } else {
+                            Text(
+                                text = "Disabled",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "@${worker.username}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Box {
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Options")
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Edit Privileges & Access") },
+                            leadingIcon = { Icon(Icons.Default.Tune, contentDescription = null) },
+                            onClick = {
+                                showMenu = false
+                                onEditPrivileges()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Reset Password") },
+                            leadingIcon = { Icon(Icons.Default.Key, contentDescription = null) },
+                            onClick = {
+                                showMenu = false
+                                onResetPassword()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(if (worker.isActive) "Disable Account" else "Enable Account") },
+                            leadingIcon = {
+                                Icon(
+                                    if (worker.isActive) Icons.Default.Block else Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = if (worker.isActive) Color(0xFFE53935) else Color(0xFF2E7D32)
+                                )
+                            },
+                            onClick = {
+                                showMenu = false
+                                onToggleStatus()
+                            }
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "@${worker.username}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Access: $accessSummary",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                if (worker.mustChangePassword) {
-                    Text(
-                        text = "Must change password on next login",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
             }
 
-            Box {
-                IconButton(onClick = { showMenu = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "Options")
-                }
-                DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Reset Password") },
-                        leadingIcon = { Icon(Icons.Default.Key, contentDescription = null) },
-                        onClick = {
-                            showMenu = false
-                            onResetPassword()
-                        }
+            // Today's Collection summary badge (instant handover count)
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                        shape = RoundedCornerShape(8.dp)
                     )
-                    DropdownMenuItem(
-                        text = { Text("Edit File Access") },
-                        leadingIcon = { Icon(Icons.Default.Security, contentDescription = null) },
-                        onClick = {
-                            showMenu = false
-                            onEditAccess()
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text(if (worker.isActive) "Disable Account" else "Enable Account") },
-                        leadingIcon = {
-                            Icon(
-                                if (worker.isActive) Icons.Default.Block else Icons.Default.CheckCircle,
-                                contentDescription = null,
-                                tint = if (worker.isActive) Color(0xFFE53935) else Color(0xFF2E7D32)
-                            )
-                        },
-                        onClick = {
-                            showMenu = false
-                            onToggleStatus()
-                        }
-                    )
-                }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Payments,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.size(6.dp))
+                Text(
+                    text = "Today's Collections: ₹${"%.0f".format(todayCollections)} ($todayPaymentCount payments)",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+
+            // Privileges Badges
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "Files: $accessSummary",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(text = "•", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                Text(
+                    text = if (worker.canRecordPayments) "Payments: Allowed" else "Payments: Blocked",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (worker.canRecordPayments) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error
+                )
+                Text(text = "•", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                Text(
+                    text = if (worker.canEditLoansDirectly) "Edit: Direct" else "Edit: Approval Req",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (worker.canEditLoansDirectly) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                )
+            }
+
+            if (worker.mustChangePassword) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Must change password on next login",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    }
+}
             }
         }
     }
@@ -515,13 +587,25 @@ private fun ResetWorkerPasswordDialog(
 }
 
 @Composable
-private fun EditFileAccessDialog(
+private fun EditWorkerPrivilegesDialog(
     worker: WorkerProfileEntity,
     allFiles: List<LoanFile>,
     onDismiss: () -> Unit,
-    onConfirm: (accessAll: Boolean, selectedFiles: List<String>) -> Unit
+    onConfirm: (
+        accessAll: Boolean,
+        selectedFiles: List<String>,
+        canRecord: Boolean,
+        canCreate: Boolean,
+        canEdit: Boolean,
+        canDelete: Boolean
+    ) -> Unit
 ) {
     var accessAll by remember { mutableStateOf(worker.accessAllFiles) }
+    var canRecord by remember { mutableStateOf(worker.canRecordPayments) }
+    var canCreate by remember { mutableStateOf(worker.canCreateLoansDirectly) }
+    var canEdit by remember { mutableStateOf(worker.canEditLoansDirectly) }
+    var canDelete by remember { mutableStateOf(worker.canDeleteRecords) }
+
     val selectedFiles = remember {
         val initial = try {
             val arr = JSONArray(worker.allowedFileIdsJson)
@@ -535,9 +619,88 @@ private fun EditFileAccessDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Edit File Access: @${worker.username}") },
+        title = { Text("Privileges: @${worker.username}") },
         text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    text = "Operational Privileges",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Record Payments
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Record Payments Directly", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        Text("Allows collecting daily installments in field", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = canRecord, onCheckedChange = { canRecord = it })
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Direct Loan Creation
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Direct Loan Creation", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        Text(if (canCreate) "Saves directly without approval" else "Requires Owner Approval first", style = MaterialTheme.typography.bodySmall, color = if (canCreate) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+                    }
+                    Switch(checked = canCreate, onCheckedChange = { canCreate = it })
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Direct Loan Modification
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Direct Loan Modification", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        Text(if (canEdit) "Can edit principal amount directly" else "Requires Owner Approval first (Safe)", style = MaterialTheme.typography.bodySmall, color = if (canEdit) MaterialTheme.colorScheme.error else Color(0xFF2E7D32))
+                    }
+                    Switch(checked = canEdit, onCheckedChange = { canEdit = it })
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Delete Records
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Delete Records", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        Text(if (canDelete) "Can delete loans/payments" else "Deletion locked (Owner only)", style = MaterialTheme.typography.bodySmall, color = if (canDelete) MaterialTheme.colorScheme.error else Color(0xFF2E7D32))
+                    }
+                    Switch(checked = canDelete, onCheckedChange = { canDelete = it })
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = "File Access Scope",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(selected = accessAll, onClick = { accessAll = true })
                     Text("All Files", style = MaterialTheme.typography.bodyMedium)
@@ -576,11 +739,11 @@ private fun EditFileAccessDialog(
                     if (!accessAll && selectedFiles.isEmpty()) {
                         errorMessage = "Please select at least one file"
                     } else {
-                        onConfirm(accessAll, selectedFiles.toList())
+                        onConfirm(accessAll, selectedFiles.toList(), canRecord, canCreate, canEdit, canDelete)
                     }
                 }
             ) {
-                Text("Save")
+                Text("Save Privileges")
             }
         },
         dismissButton = {

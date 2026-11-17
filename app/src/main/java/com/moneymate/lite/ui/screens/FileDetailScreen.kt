@@ -122,6 +122,7 @@ fun FileDetailScreen(
     var editingTransaction by remember { mutableStateOf<DateTransaction?>(null) }
     var deletingTransaction by remember { mutableStateOf<DateTransaction?>(null) }
     var transactionPersonTarget by remember { mutableStateOf<Person?>(null) }
+    var pendingLoanProposal by remember { mutableStateOf<LoanProposalTarget?>(null) }
 
 
     // Pagination states
@@ -669,7 +670,25 @@ fun FileDetailScreen(
                     personViewModel.updatePerson(result.person, person.sortOrder, result.targetPosition - 1)
                     if (activeLoan != null && result.initialLoanAmount > 0) {
                         if (result.initialLoanAmount != activeLoan.totalAmount || result.initialLoanDate != activeLoan.dateGiven) {
-                            loanViewModel.updateLoan(activeLoan.loanId, result.initialLoanAmount, result.initialLoanDate)
+                            val updateRes = loanViewModel.updateLoan(activeLoan.loanId, result.initialLoanAmount, result.initialLoanDate)
+                            if (updateRes.isFailure) {
+                                val err = updateRes.exceptionOrNull()?.message ?: ""
+                                if (err.contains("REQUIRE_APPROVAL") || err.contains("PERMISSION_DENIED")) {
+                                    pendingLoanProposal = LoanProposalTarget(
+                                        fileSharedId = fileInfo?.sharedId ?: "file_$fileId",
+                                        fileName = displayName,
+                                        loanId = activeLoan.loanId,
+                                        oldAmount = activeLoan.totalAmount,
+                                        newAmount = result.initialLoanAmount,
+                                        newDate = result.initialLoanDate,
+                                        personName = person.name
+                                    )
+                                } else {
+                                    snackbarHostState.showSnackbar(err)
+                                }
+                            } else {
+                                snackbarHostState.showSnackbar("Loan updated successfully")
+                            }
                         }
                     }
                 }
@@ -758,8 +777,14 @@ fun FileDetailScreen(
         EditTransactionDialog(
             transaction = tx,
             loanViewModel = loanViewModel,
+            fileSharedId = fileInfo?.sharedId ?: "file_$fileId",
+            fileName = displayName,
             onDismiss = { editingTransaction = null },
-            onSaved = { editingTransaction = null }
+            onSaved = { editingTransaction = null },
+            onRequestProposal = { proposal ->
+                editingTransaction = null
+                pendingLoanProposal = proposal
+            }
         )
     }
 
@@ -776,9 +801,21 @@ fun FileDetailScreen(
                 TextButton(
                     onClick = {
                         if (tx.type == DateTransactionType.GIVEN) {
-                            loanViewModel.deleteLoan(tx.id)
+                            loanViewModel.deleteLoan(tx.id) { res ->
+                                if (res.isFailure) {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(res.exceptionOrNull()?.message ?: "Failed to delete loan")
+                                    }
+                                }
+                            }
                         } else {
-                            loanViewModel.deletePayment(tx.id)
+                            loanViewModel.deletePayment(tx.id) { res ->
+                                if (res.isFailure) {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(res.exceptionOrNull()?.message ?: "Failed to delete payment")
+                                    }
+                                }
+                            }
                         }
                         deletingTransaction = null
                     }
@@ -789,6 +826,34 @@ fun FileDetailScreen(
             dismissButton = {
                 TextButton(onClick = { deletingTransaction = null }) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Pending Loan Modification Proposal Dialog
+    pendingLoanProposal?.let { proposal ->
+        SubmitProposalDialog(
+            title = "Request Loan Modification",
+            summaryText = "Customer: ${proposal.personName}\nChange amount: ₹${"%.0f".format(proposal.oldAmount)} ➔ ₹${"%.0f".format(proposal.newAmount)}",
+            onDismiss = { pendingLoanProposal = null },
+            onSubmit = { reason ->
+                scope.launch {
+                    val res = loanViewModel.submitLoanChangeProposal(
+                        fileSharedId = proposal.fileSharedId,
+                        fileName = proposal.fileName,
+                        loanId = proposal.loanId,
+                        oldAmount = proposal.oldAmount,
+                        newAmount = proposal.newAmount,
+                        newDate = proposal.newDate,
+                        reason = reason
+                    )
+                    pendingLoanProposal = null
+                    if (res.isSuccess) {
+                        snackbarHostState.showSnackbar("Loan change request submitted to Owner for approval!")
+                    } else {
+                        snackbarHostState.showSnackbar("Failed to submit request: ${res.exceptionOrNull()?.message}")
+                    }
                 }
             }
         )
@@ -1016,8 +1081,11 @@ private fun CustomerSelectDialog(
 private fun EditTransactionDialog(
     transaction: DateTransaction,
     loanViewModel: LoanViewModel,
+    fileSharedId: String,
+    fileName: String,
     onDismiss: () -> Unit,
-    onSaved: () -> Unit
+    onSaved: () -> Unit,
+    onRequestProposal: (LoanProposalTarget) -> Unit
 ) {
     var amountText by remember { mutableStateOf("%.0f".format(transaction.amount)) }
     var amountError by remember { mutableStateOf(false) }
@@ -1137,7 +1205,24 @@ private fun EditTransactionDialog(
                     }
                     result.fold(
                         onSuccess = { onSaved() },
-                        onFailure = { errorMessage = it.message ?: "Failed to save transaction" }
+                        onFailure = { err ->
+                            val msg = err.message ?: "Failed to save transaction"
+                            if (msg.contains("REQUIRE_APPROVAL") || msg.contains("PERMISSION_DENIED")) {
+                                onRequestProposal(
+                                    LoanProposalTarget(
+                                        fileSharedId = fileSharedId,
+                                        fileName = fileName,
+                                        loanId = transaction.id,
+                                        oldAmount = transaction.amount,
+                                        newAmount = amount,
+                                        newDate = transactionDate,
+                                        personName = transaction.personName
+                                    )
+                                )
+                            } else {
+                                errorMessage = msg
+                            }
+                        }
                     )
                 }
             }) {
@@ -1289,6 +1374,16 @@ private fun TransactionRow(
         }
     }
 }
+
+private data class LoanProposalTarget(
+    val fileSharedId: String,
+    val fileName: String,
+    val loanId: Long,
+    val oldAmount: Double,
+    val newAmount: Double,
+    val newDate: Long,
+    val personName: String
+)
 
 enum class DateTransactionType {
     GIVEN, RECEIVED

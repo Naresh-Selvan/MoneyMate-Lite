@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 28,
-  "latestVersionName": "1.0.28",
+  "latestVersionCode": 29,
+  "latestVersionName": "1.0.29",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Worker provisioning conflict recovery and auto-adoption for previously interrupted creations."
+  "changelog": "Worker privilege controls in Owner dashboard, proposal gate for loan modifications, payment deletion protection, and live worker collection summary."
 }

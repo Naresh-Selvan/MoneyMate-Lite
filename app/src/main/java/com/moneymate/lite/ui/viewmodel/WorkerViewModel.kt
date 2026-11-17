@@ -8,6 +8,7 @@ import com.moneymate.lite.data.entity.LoanFile
 import com.moneymate.lite.data.entity.WorkerProfileEntity
 import com.moneymate.lite.data.repository.WorkerRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -132,6 +133,66 @@ class WorkerViewModel @Inject constructor(
                 onSuccess()
             } else {
                 onError(result.exceptionOrNull()?.message ?: "Failed to update worker status")
+            }
+        }
+    }
+
+    fun getTodayCollectionsFlow(workerUid: String): Flow<Double> {
+        val startOfDay = getStartOfTodayMillis()
+        return workerRepository.getTodayCollectionsForWorker(workerUid, startOfDay)
+    }
+
+    fun getTodayCountFlow(workerUid: String): Flow<Int> {
+        val startOfDay = getStartOfTodayMillis()
+        return workerRepository.getTodayPaymentCountForWorker(workerUid, startOfDay)
+    }
+
+    private fun getStartOfTodayMillis(): Long {
+        val cal = java.util.Calendar.getInstance()
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+        cal.set(java.util.Calendar.MINUTE, 0)
+        cal.set(java.util.Calendar.SECOND, 0)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        return cal.timeInMillis
+    }
+
+    fun updateWorkerPrivileges(
+        workerUid: String,
+        accessAllFiles: Boolean,
+        allowedFileIds: List<String>,
+        canRecordPayments: Boolean,
+        canCreateLoansDirectly: Boolean,
+        canEditLoansDirectly: Boolean,
+        canDeleteRecords: Boolean,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val bizId = authManager.businessId.value
+        val owner = authManager.currentUser.value
+        if (bizId.isBlank() || owner == null) {
+            onError("Owner authentication required")
+            return
+        }
+
+        viewModelScope.launch {
+            _isProcessing.value = true
+            val result = workerRepository.updateWorkerPrivileges(
+                businessId = bizId,
+                workerUid = workerUid,
+                accessAllFiles = accessAllFiles,
+                allowedFileIds = allowedFileIds,
+                canRecordPayments = canRecordPayments,
+                canCreateLoansDirectly = canCreateLoansDirectly,
+                canEditLoansDirectly = canEditLoansDirectly,
+                canDeleteRecords = canDeleteRecords,
+                ownerActorId = owner.uid,
+                ownerActorName = owner.displayName ?: "Owner"
+            )
+            _isProcessing.value = false
+            if (result.isSuccess) {
+                onSuccess()
+            } else {
+                onError(result.exceptionOrNull()?.message ?: "Failed to update privileges")
             }
         }
     }
