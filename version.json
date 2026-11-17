@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 27,
-  "latestVersionName": "1.0.27",
+  "latestVersionCode": 28,
+  "latestVersionName": "1.0.28",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Fix worker email formatting validation in Firebase Auth and support HTTP redirects for GitHub release APK downloads."
+  "changelog": "Worker provisioning conflict recovery and auto-adoption for previously interrupted creations."
 }

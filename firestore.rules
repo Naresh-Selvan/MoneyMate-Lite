@@ -12,23 +12,31 @@ service cloud.firestore {
     }
 
     function isBusinessOwner(bizId) {
-      return isAuthenticated() &&
-        getUserData().businessId == bizId &&
-        getUserData().role == 'OWNER';
+      return isAuthenticated() && (
+        bizId == 'biz_' + request.auth.uid ||
+        (getUserData().businessId == bizId && getUserData().role == 'OWNER')
+      );
     }
 
     function isBusinessMember(bizId) {
-      return isAuthenticated() &&
-        getUserData().businessId == bizId &&
-        getUserData().isActive == true;
+      return isAuthenticated() && (
+        bizId == 'biz_' + request.auth.uid ||
+        (getUserData().businessId == bizId && getUserData().isActive == true)
+      );
     }
 
     function isWorkerWithFileAccess(bizId, fileSharedId) {
       return isBusinessMember(bizId) && (
+        bizId == 'biz_' + request.auth.uid ||
         getUserData().role == 'OWNER' ||
         getUserData().accessAllFiles == true ||
         fileSharedId in getUserData().allowedFileIds
       );
+    }
+
+    // Legacy backup / single-user files (backward compatibility)
+    match /files/{userId}/{document=**} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
     }
 
     // User profiles
@@ -39,24 +47,29 @@ service cloud.firestore {
         (getUserData().role == 'OWNER' && resource.data.businessId == getUserData().businessId)
       );
 
-      // Owner can provision and manage workers; User can update non-privilege flags (e.g., mustChangePassword)
+      // Owner can provision and manage workers; User can create their own profile
       allow create: if isAuthenticated() && (
         request.auth.uid == userId ||
-        getUserData().role == 'OWNER'
+        getUserData().role == 'OWNER' ||
+        request.resource.data.businessId == 'biz_' + request.auth.uid
       );
 
       allow update: if isAuthenticated() && (
         getUserData().role == 'OWNER' ||
+        resource.data.businessId == 'biz_' + request.auth.uid ||
         (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'businessId', 'accessAllFiles', 'allowedFileIds', 'isActive']))
       );
 
-      allow delete: if isAuthenticated() && getUserData().role == 'OWNER';
+      allow delete: if isAuthenticated() && (
+        getUserData().role == 'OWNER' ||
+        resource.data.businessId == 'biz_' + request.auth.uid
+      );
     }
 
     // Username lookup collection for worker provisioning and authentication
     match /usernames/{username} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && getUserData().role == 'OWNER';
+      allow write: if isAuthenticated();
     }
 
     // Business Root Documents
@@ -64,10 +77,22 @@ service cloud.firestore {
       allow read: if isBusinessMember(businessId);
       allow write: if isBusinessOwner(businessId);
 
+      // Workers Directory
+      match /workers/{workerId} {
+        allow read: if isBusinessMember(businessId);
+        allow write: if isBusinessOwner(businessId);
+      }
+
+      // Usernames within business
+      match /usernames/{username} {
+        allow read: if isAuthenticated();
+        allow write: if isBusinessOwner(businessId);
+      }
+
       // Files Collection
       match /files/{fileId} {
         allow read: if isBusinessMember(businessId) && (
-          getUserData().role == 'OWNER' ||
+          isBusinessOwner(businessId) ||
           getUserData().accessAllFiles == true ||
           fileId in getUserData().allowedFileIds
         );
@@ -110,7 +135,7 @@ service cloud.firestore {
       match /approval_requests/{requestId} {
         // Owner can read all. Workers can read requests they submitted.
         allow read: if isBusinessMember(businessId) && (
-          getUserData().role == 'OWNER' ||
+          isBusinessOwner(businessId) ||
           resource.data.workerId == request.auth.uid
         );
 

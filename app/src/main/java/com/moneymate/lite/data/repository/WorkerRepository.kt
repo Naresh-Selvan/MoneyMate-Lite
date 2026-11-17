@@ -68,12 +68,18 @@ class WorkerRepository @Inject constructor(
             }
             val secondaryAuth = FirebaseAuth.getInstance(secondaryApp)
 
-            val authResult = secondaryAuth.createUserWithEmailAndPassword(workerEmail, tempPassword).await()
-            val workerUid = authResult.user?.uid
-                ?: throw IllegalStateException("Failed to create worker authentication account")
-
-            // Sign out the secondary app immediately
-            secondaryAuth.signOut()
+            val workerUid = try {
+                val authResult = secondaryAuth.createUserWithEmailAndPassword(workerEmail, tempPassword).await()
+                authResult.user?.uid ?: throw IllegalStateException("Failed to create worker authentication account")
+            } catch (e: com.google.firebase.auth.FirebaseAuthUserCollisionException) {
+                // If the auth user was already created in an earlier partial attempt, reuse and reset password
+                try {
+                    val signInResult = secondaryAuth.signInWithEmailAndPassword(workerEmail, tempPassword).await()
+                    signInResult.user?.uid ?: throw e
+                } catch (signInErr: Exception) {
+                    throw IllegalStateException("Username '$cleanUsername' is already registered in Firebase. Please choose another username or delete it from Firebase Authentication.", e)
+                }
+            }
 
             // 4. Save UserProfile in Firestore
             val allowedJson = JSONArray(allowedFileIds).toString()
@@ -110,6 +116,7 @@ class WorkerRepository @Inject constructor(
                 firestoreData
             )
             batch.commit().await()
+            secondaryAuth.signOut()
 
             // 5. Save locally in Room
             val entity = WorkerProfileEntity(
