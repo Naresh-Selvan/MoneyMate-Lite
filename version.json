@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 39,
-  "latestVersionName": "1.0.39",
-  "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/download/v1.0.39/app-release.apk",
-  "changelog": "Match customer balances across all views by ensuring View by Date and Export to PDF calculate active loan balances consistently."
+  "latestVersionCode": 40,
+  "latestVersionName": "1.0.40",
+  "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/download/v1.0.40/app-release.apk",
+  "changelog": "Fix date view balance calculation to evaluate the latest active loan per customer, prevent multi-loan sum leakage, and auto-close stale duplicate active loans."
 }

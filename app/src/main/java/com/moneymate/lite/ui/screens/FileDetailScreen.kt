@@ -502,7 +502,8 @@ fun FileDetailScreen(
                         val globalIndex = (currentPage - 1) * pageSize + index
                         val givenTx = personGivenTx[person.id]
                         val receivedTx = personReceivedTx[person.id]
-                        val personBalance = balancesUpToDateMap[person.id]?.balance ?: 0.0
+                        val activeLoan = activeLoanMap[person.id]
+                        val personBalance = balancesUpToDateMap[person.id]?.balance ?: activeLoan?.balance ?: 0.0
 
                         DatePersonCard(
                             index = globalIndex,

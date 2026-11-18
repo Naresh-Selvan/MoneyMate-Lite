@@ -32,6 +32,27 @@ object AppModule {
             "moneymate_lite.db"
         )
             .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3)
+            .addCallback(object : androidx.room.RoomDatabase.Callback() {
+                override fun onOpen(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                    super.onOpen(db)
+                    try {
+                        db.execSQL("""
+                            UPDATE loans 
+                            SET isCompleted = 1, completedAt = dateGiven, lastModified = strftime('%s', 'now') * 1000 
+                            WHERE isCompleted = 0 AND isDeleted = 0 
+                              AND id < (
+                                  SELECT MAX(l2.id) 
+                                  FROM loans l2 
+                                  WHERE l2.personId = loans.personId 
+                                    AND l2.isCompleted = 0 
+                                    AND l2.isDeleted = 0
+                              )
+                        """.trimIndent())
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            })
             .build()
     }
 

@@ -76,6 +76,7 @@ interface LoanDao {
         FROM loans
         INNER JOIN persons ON loans.personId = persons.id
         WHERE persons.fileId = :fileId AND loans.isCompleted = 0 AND loans.isDeleted = 0 AND persons.isDeleted = 0
+        ORDER BY loans.dateGiven ASC, loans.id ASC
     """)
     fun getAllActiveLoansInFile(fileId: Long): Flow<List<LoanWithBalance>>
 
@@ -117,27 +118,43 @@ interface LoanDao {
     @Query("""
         SELECT 
             persons.id AS personId,
-            MAX(0.0, (
-                SELECT COALESCE(SUM(loans.totalAmount), 0.0) 
-                FROM loans 
-                WHERE loans.personId = persons.id 
-                  AND loans.isDeleted = 0 
-                  AND loans.isCompleted = 0
-                  AND loans.dateGiven <= :upToDate
-            ) - (
-                SELECT COALESCE(SUM(payments.amount), 0.0) 
-                FROM payments 
-                INNER JOIN loans ON payments.loanId = loans.id
-                WHERE loans.personId = persons.id 
-                  AND payments.isDeleted = 0 
-                  AND loans.isDeleted = 0
-                  AND loans.isCompleted = 0
-                  AND payments.date <= :upToDate
-            )) AS balance
+            COALESCE(
+                (
+                    SELECT MAX(0.0, l.totalAmount - (
+                        SELECT COALESCE(SUM(p.amount), 0.0)
+                        FROM payments p
+                        WHERE p.loanId = l.id
+                          AND p.isDeleted = 0
+                          AND p.date <= :upToDate
+                    ))
+                    FROM loans l
+                    WHERE l.personId = persons.id
+                      AND l.isDeleted = 0
+                      AND l.isCompleted = 0
+                      AND l.dateGiven <= :upToDate
+                    ORDER BY l.dateGiven DESC, l.id DESC
+                    LIMIT 1
+                ),
+                0.0
+            ) AS balance
         FROM persons
         WHERE persons.fileId = :fileId AND persons.isDeleted = 0
     """)
     fun getBalancesUpToDate(fileId: Long, upToDate: Long): Flow<List<PersonBalanceUpToDate>>
+
+    @Query("""
+        UPDATE loans 
+        SET isCompleted = 1, completedAt = dateGiven, lastModified = :now 
+        WHERE isCompleted = 0 AND isDeleted = 0 
+          AND id < (
+              SELECT MAX(l2.id) 
+              FROM loans l2 
+              WHERE l2.personId = loans.personId 
+                AND l2.isCompleted = 0 
+                AND l2.isDeleted = 0
+          )
+    """)
+    suspend fun closeOlderDuplicateActiveLoans(now: Long = System.currentTimeMillis()): Int
 
     @Query("UPDATE loans SET isCompleted = 0, completedAt = null, lastModified = :modified WHERE id = :loanId")
     suspend fun markIncomplete(loanId: Long, modified: Long = System.currentTimeMillis())
