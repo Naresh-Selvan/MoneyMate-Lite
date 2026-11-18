@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 38,
-  "latestVersionName": "1.0.38",
-  "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/download/v1.0.38/app-release.apk",
-  "changelog": "Fix PDF bottom cut-off margin (safe 42pt margin), keep the last 3 lines completely empty at the bottom of each column, 32 customers (4 blocks of 8) per column, and auto-sync offline data."
+  "latestVersionCode": 39,
+  "latestVersionName": "1.0.39",
+  "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/download/v1.0.39/app-release.apk",
+  "changelog": "Match customer balances across all views by ensuring View by Date and Export to PDF calculate active loan balances consistently."
 }

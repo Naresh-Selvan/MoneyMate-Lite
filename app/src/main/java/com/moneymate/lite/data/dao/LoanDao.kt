@@ -117,11 +117,12 @@ interface LoanDao {
     @Query("""
         SELECT 
             persons.id AS personId,
-            (
+            MAX(0.0, (
                 SELECT COALESCE(SUM(loans.totalAmount), 0.0) 
                 FROM loans 
                 WHERE loans.personId = persons.id 
                   AND loans.isDeleted = 0 
+                  AND loans.isCompleted = 0
                   AND loans.dateGiven <= :upToDate
             ) - (
                 SELECT COALESCE(SUM(payments.amount), 0.0) 
@@ -130,8 +131,9 @@ interface LoanDao {
                 WHERE loans.personId = persons.id 
                   AND payments.isDeleted = 0 
                   AND loans.isDeleted = 0
+                  AND loans.isCompleted = 0
                   AND payments.date <= :upToDate
-            ) AS balance
+            )) AS balance
         FROM persons
         WHERE persons.fileId = :fileId AND persons.isDeleted = 0
     """)
