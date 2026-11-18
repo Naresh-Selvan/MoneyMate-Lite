@@ -37,8 +37,8 @@ object CollectionSheetPdfGenerator {
     private const val PAGE_HEIGHT = 1008
 
     private const val MARGIN_X = 20f
-    private const val MARGIN_TOP = 20f
-    private const val MARGIN_BOTTOM = 20f
+    private const val MARGIN_TOP = 24f
+    private const val MARGIN_BOTTOM = 42f // Generous bottom margin (0.58 in) prevents printer clipping
     private const val TABLE_GAP = 14f
 
     // Total usable width = 612 - 40 = 572
@@ -50,15 +50,17 @@ object CollectionSheetPdfGenerator {
     private const val EMPTY_CELL_WIDTH = 24.43f
     private const val EMPTY_CELLS_COUNT = 7
 
-    private const val DATA_ROW_HEIGHT = 24.2f
+    // Available height: 1008 - 24 - 42 = 942f
+    // 38 rows per column: 942 / 38 = ~24.78f per row
+    private const val ROWS_PER_COLUMN = 38
+    private const val DATA_ROW_HEIGHT = 24.78f
 
-    // Available height for rows: 1008 - 20 - 20 = 968
-    // 968 / 24.2 = 40 rows per column, 80 rows per page
-    private const val ROWS_PER_COLUMN = 40
     private const val CUSTOMERS_PER_BLOCK = 8
-    // 4 blocks of (8 customers + 1 empty separator row) + 4 customers = 36 customers + 4 empty rows = 40 rows
-    private const val CUSTOMERS_PER_COLUMN = 36
-    private const val ITEMS_PER_PAGE = CUSTOMERS_PER_COLUMN * 2 // 72 customers per Legal page
+    private const val BLOCKS_PER_COLUMN = 4
+    // 4 blocks of 8 customers = 32 customers per column (32 + 3 separators = 35 rows)
+    // The remaining 3 rows (rows 36, 37, 38) are left completely EMPTY as requested!
+    private const val CUSTOMERS_PER_COLUMN = CUSTOMERS_PER_BLOCK * BLOCKS_PER_COLUMN // 32
+    private const val ITEMS_PER_PAGE = CUSTOMERS_PER_COLUMN * 2 // 64 customers per Legal page
 
     fun generatePdf(
         context: Context,
@@ -219,14 +221,16 @@ object CollectionSheetPdfGenerator {
     private fun buildTableRows(customers: List<CollectionSheetRow>): List<CollectionSheetRow?> {
         val result = mutableListOf<CollectionSheetRow?>()
         var count = 0
-        for (c in customers) {
+        for (c in customers.take(CUSTOMERS_PER_COLUMN)) {
             if (count > 0 && count % CUSTOMERS_PER_BLOCK == 0) {
                 result.add(null) // Empty separator row after every 8 customer rows
             }
             result.add(c)
             count++
-            if (result.size >= ROWS_PER_COLUMN) break
         }
+        // Pad with empty rows until exactly 38 rows. 
+        // For 32 customers (4 blocks of 8 + 3 separators = 35 rows), 
+        // this leaves rows 36, 37, 38 completely EMPTY at the bottom!
         while (result.size < ROWS_PER_COLUMN) {
             result.add(null)
         }
