@@ -147,6 +147,17 @@ interface PaymentDao {
     """)
     suspend fun relinkPaymentsToLocalLoans(): Int
 
+    @Query("""
+        UPDATE payments 
+        SET syncStatus = 'PENDING_SYNC', 
+            businessId = :businessId,
+            loanSharedId = COALESCE((SELECT sharedId FROM loans WHERE loans.id = payments.loanId LIMIT 1), loanSharedId),
+            lastModified = :now
+        WHERE (businessId = '' OR businessId IS NULL OR syncStatus != 'SYNCED')
+          AND isDeleted = 0
+    """)
+    suspend fun markUnsyncedPaymentsForSync(businessId: String, now: Long = System.currentTimeMillis()): Int
+
     @Query("DELETE FROM payments")
     suspend fun clearAll()
 }

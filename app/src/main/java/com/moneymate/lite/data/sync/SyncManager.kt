@@ -152,6 +152,12 @@ class SyncManager @Inject constructor(
                 return@withContext Result.success(Unit)
             }
 
+            // Auto-heal and mark any local unsynced records on Owner device for upload
+            if (userRole == UserRole.OWNER) {
+                loanDao.markUnsyncedLoansForSync(activeBizId, syncStartTime)
+                paymentDao.markUnsyncedPaymentsForSync(activeBizId, syncStartTime)
+            }
+
             // 2. Process pending offline payments
             val pendingPayments = paymentDao.getPaymentsPendingSync()
             for (payment in pendingPayments) {
@@ -245,8 +251,10 @@ class SyncManager @Inject constructor(
             // 3. Pull updates from Firestore for authorized records (fast incremental sync)
             val lastSyncKey = "last_sync_$activeBizId"
             val lastSync = syncPrefs.getLong(lastSyncKey, 0L)
+            val isSchemaUpgrade = syncPrefs.getInt("sync_schema_version", 0) < 37
             val isFirstSync = loanFileDao.getAllFilesIncludingDeleted().isEmpty() || lastSync == 0L
-            val cutoff = if (forceFullSync || isFirstSync) 0L else maxOf(0L, lastSync - 60_000L)
+            val doFullSync = forceFullSync || isFirstSync || isSchemaUpgrade
+            val cutoff = if (doFullSync) 0L else maxOf(0L, lastSync - 60_000L)
 
             pullUpdatesFromCloud(activeBizId, userDoc, userRole, cutoff)
 
@@ -255,6 +263,9 @@ class SyncManager @Inject constructor(
             loanDao.relinkLoansToLocalPersons()
             paymentDao.relinkPaymentsToLocalLoans()
 
+            if (isSchemaUpgrade) {
+                syncPrefs.edit().putInt("sync_schema_version", 37).apply()
+            }
             syncPrefs.edit().putLong(lastSyncKey, syncStartTime).apply()
             _lastSyncTime.value = syncStartTime
             _syncErrors.value = errors
