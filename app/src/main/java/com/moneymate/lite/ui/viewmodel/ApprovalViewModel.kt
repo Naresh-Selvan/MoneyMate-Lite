@@ -10,7 +10,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -24,20 +26,34 @@ class ApprovalViewModel @Inject constructor(
 
     val pendingRequests: StateFlow<List<ApprovalRequestEntity>> = authManager.businessId
         .flatMapLatest { bizId ->
-            approvalRepository.getPendingRequestsFlow(bizId)
+            if (bizId.isNotBlank()) {
+                approvalRepository.getPendingRequestsFlow(bizId)
+            } else {
+                flowOf(emptyList())
+            }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val pendingCount: StateFlow<Int> = authManager.businessId
         .flatMapLatest { bizId ->
-            approvalRepository.getPendingRequestsCountFlow(bizId)
+            if (bizId.isNotBlank()) {
+                approvalRepository.getPendingRequestsCountFlow(bizId)
+            } else {
+                flowOf(0)
+            }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
-    val workerRequests: StateFlow<List<ApprovalRequestEntity>> = authManager.currentUser
-        .flatMapLatest { user ->
-            val uid = user?.uid ?: ""
-            val bizId = authManager.businessId.value
+    val workerRequests: StateFlow<List<ApprovalRequestEntity>> = combine(
+        authManager.currentUser,
+        authManager.businessId
+    ) { user, bizId ->
+        Pair(user?.uid ?: "", bizId)
+    }.flatMapLatest { (uid, bizId) ->
+        if (uid.isNotBlank() && bizId.isNotBlank()) {
             approvalRepository.getRequestsByWorkerFlow(bizId, uid)
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        } else {
+            flowOf(emptyList())
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _customerNames = MutableStateFlow<Map<String, String>>(emptyMap())
     val customerNames: StateFlow<Map<String, String>> = _customerNames.asStateFlow()

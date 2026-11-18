@@ -1,6 +1,7 @@
 package com.moneymate.lite.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,11 +18,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -76,6 +81,7 @@ fun ActivityHistoryScreen(
     var showActorMenu by remember { mutableStateOf(false) }
     var showActionMenu by remember { mutableStateOf(false) }
     var showFileMenu by remember { mutableStateOf(false) }
+    var selectedLogForDetails by remember { mutableStateOf<ActivityLogEntity?>(null) }
 
     val distinctActions = remember {
         listOf(
@@ -288,16 +294,29 @@ fun ActivityHistoryScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(logs, key = { it.id }) { log ->
-                        ActivityLogCard(log = log)
+                        ActivityLogCard(
+                            log = log,
+                            onClick = { selectedLogForDetails = log }
+                        )
                     }
                 }
             }
         }
     }
+
+    if (selectedLogForDetails != null) {
+        ActivityDetailsDialog(
+            log = selectedLogForDetails!!,
+            onDismiss = { selectedLogForDetails = null }
+        )
+    }
 }
 
 @Composable
-private fun ActivityLogCard(log: ActivityLogEntity) {
+private fun ActivityLogCard(
+    log: ActivityLogEntity,
+    onClick: () -> Unit
+) {
     val dateFormat = remember { SimpleDateFormat("dd MMM yyyy, hh:mm:ss a", Locale.getDefault()) }
     val formattedTime = remember(log.timestamp) {
         dateFormat.format(Date(log.timestamp))
@@ -325,7 +344,9 @@ private fun ActivityLogCard(log: ActivityLogEntity) {
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
@@ -452,12 +473,23 @@ private fun ActivityLogCard(log: ActivityLogEntity) {
                     color = if (log.outcome == "SUCCESS") Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
                     fontWeight = FontWeight.Bold
                 )
-                if (!log.requestId.isNullOrBlank()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    if (!log.requestId.isNullOrBlank()) {
+                        Text(
+                            text = "Req: ${log.requestId.take(8)} • ",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
                     Text(
-                        text = "Req: ${log.requestId.take(8)}",
+                        text = "View details ➔",
                         style = MaterialTheme.typography.labelSmall,
-                        fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
             }
@@ -527,5 +559,218 @@ private fun formatFriendlyDetails(log: ActivityLogEntity): String {
         "REQUEST_REJECTED" -> "Owner rejected the change request (Reason: ${log.reason ?: "Unspecified"})$filePart"
         "WORKER_CREATED" -> "New worker account was created by ${log.actorName}"
         else -> "${log.action.replace("_", " ")}$filePart"
+    }
+}
+
+@Composable
+private fun ActivityDetailsDialog(
+    log: ActivityLogEntity,
+    onDismiss: () -> Unit
+) {
+    val dateFormat = remember { SimpleDateFormat("dd MMM yyyy, hh:mm:ss a", Locale.getDefault()) }
+    val formattedTime = remember(log.timestamp) {
+        dateFormat.format(Date(log.timestamp))
+    }
+    val friendlyTitle = remember(log.action) { formatActionTitle(log.action) }
+    val friendlyDetails = remember(log.details, log.action, log.fileName, log.actorName, log.reason) {
+        formatFriendlyDetails(log)
+    }
+
+    // Try to extract customer name and amount if embedded in details
+    val customerName = remember(log.details) {
+        when {
+            log.details?.contains("from '") == true -> log.details.substringAfter("from '").substringBefore("'")
+            log.details?.contains("to '") == true -> log.details.substringAfter("to '").substringBefore("'")
+            log.details?.contains("for customer '") == true -> log.details.substringAfter("for customer '").substringBefore("'")
+            else -> null
+        }
+    }
+    val amountStr = remember(log.details) {
+        if (log.details?.contains("₹") == true) {
+            "₹" + log.details.substringAfter("₹").takeWhile { it.isDigit() || it == '.' || it == ',' }
+        } else null
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = friendlyTitle,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Actor info (Who collected it / performed action)
+                val roleText = if (log.actorRole.equals("OWNER", ignoreCase = true)) "Owner" else "Worker"
+                DetailRow(
+                    icon = "👤",
+                    label = "Performed By",
+                    value = "${log.actorName} ($roleText)"
+                )
+
+                // Customer info (Whom it was collected from / given to)
+                if (customerName != null) {
+                    DetailRow(
+                        icon = "🧑",
+                        label = "Customer",
+                        value = customerName
+                    )
+                }
+
+                // Amount
+                if (amountStr != null) {
+                    DetailRow(
+                        icon = "💰",
+                        label = "Amount",
+                        value = amountStr,
+                        isBold = true,
+                        valueColor = if (log.action.contains("PAYMENT")) Color(0xFF2E7D32) else MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                // File Name
+                if (!log.fileName.isNullOrBlank()) {
+                    DetailRow(
+                        icon = "📁",
+                        label = "File",
+                        value = log.fileName
+                    )
+                }
+
+                // Date & Time
+                DetailRow(
+                    icon = "📅",
+                    label = "Date & Time",
+                    value = formattedTime
+                )
+
+                // What happened / Summary
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text(
+                            text = "Full Summary",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = friendlyDetails,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+
+                // Reason if present
+                if (!log.reason.isNullOrBlank()) {
+                    DetailRow(
+                        icon = "💡",
+                        label = "Reason",
+                        value = log.reason
+                    )
+                }
+
+                // Changes if present
+                if (!log.beforeSnapshotJson.isNullOrBlank() || !log.afterSnapshotJson.isNullOrBlank()) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "Changes Recorded",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            if (!log.beforeSnapshotJson.isNullOrBlank()) {
+                                Text(
+                                    text = "Before: ${log.beforeSnapshotJson.removePrefix("{").removeSuffix("}").replace("\"", "")}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (!log.afterSnapshotJson.isNullOrBlank()) {
+                                Text(
+                                    text = "After: ${log.afterSnapshotJson.removePrefix("{").removeSuffix("}").replace("\"", "")}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Status
+                DetailRow(
+                    icon = "📌",
+                    label = "Outcome Status",
+                    value = log.outcome,
+                    valueColor = if (log.outcome == "SUCCESS") Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
+                    isBold = true
+                )
+
+                if (!log.requestId.isNullOrBlank()) {
+                    DetailRow(
+                        icon = "🏷️",
+                        label = "Request ID",
+                        value = log.requestId
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
+}
+
+@Composable
+private fun DetailRow(
+    icon: String,
+    label: String,
+    value: String,
+    isBold: Boolean = false,
+    valueColor: Color = Color.Unspecified
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(icon, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = if (isBold) FontWeight.Bold else FontWeight.Normal,
+            color = valueColor,
+            textAlign = TextAlign.End,
+            modifier = Modifier.padding(start = 12.dp)
+        )
     }
 }

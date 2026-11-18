@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PictureAsPdf
@@ -246,7 +247,7 @@ fun ExportCollectionSheetDialog(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 8.dp),
+                            .padding(vertical = 12.dp),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -254,37 +255,55 @@ fun ExportCollectionSheetDialog(
                         Spacer(modifier = Modifier.size(12.dp))
                         Text("Calculating balances & preparing PDF...", style = MaterialTheme.typography.bodySmall)
                     }
+                } else {
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Primary Download Button - prominent, full-width, clean
+                    Button(
+                        onClick = { exportSheet(ExportAction.DOWNLOAD) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        enabled = !isGenerating
+                    ) {
+                        Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.size(8.dp))
+                        Text("Download PDF", fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Secondary Action Buttons (Print & Share) side-by-side
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { exportSheet(ExportAction.PRINT) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp),
+                            enabled = !isGenerating
+                        ) {
+                            Icon(Icons.Default.Print, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.size(6.dp))
+                            Text("Print")
+                        }
+                        OutlinedButton(
+                            onClick = { exportSheet(ExportAction.SHARE) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp),
+                            enabled = !isGenerating
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.size(6.dp))
+                            Text("Share")
+                        }
+                    }
                 }
             }
         },
-        confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                OutlinedButton(
-                    onClick = { exportSheet(ExportAction.PRINT) },
-                    enabled = !isGenerating
-                ) {
-                    Icon(Icons.Default.Print, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.size(4.dp))
-                    Text("Print")
-                }
-                OutlinedButton(
-                    onClick = { exportSheet(ExportAction.SHARE) },
-                    enabled = !isGenerating
-                ) {
-                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.size(4.dp))
-                    Text("Share")
-                }
-                Button(
-                    onClick = { exportSheet(ExportAction.DOWNLOAD) },
-                    enabled = !isGenerating
-                ) {
-                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.size(4.dp))
-                    Text("Download")
-                }
-            }
-        },
+        confirmButton = {},
         dismissButton = {
             TextButton(
                 onClick = onDismiss,

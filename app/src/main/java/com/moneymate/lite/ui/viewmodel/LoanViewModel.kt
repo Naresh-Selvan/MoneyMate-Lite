@@ -15,6 +15,7 @@ import com.moneymate.lite.data.repository.ApprovalRepository
 import com.moneymate.lite.data.repository.LoanRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
+import com.moneymate.lite.data.sync.SyncManager
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -27,7 +28,8 @@ class LoanViewModel @Inject constructor(
     private val repository: LoanRepository,
     private val authManager: AuthManager,
     private val approvalRepository: ApprovalRepository,
-    private val activityLogRepository: ActivityLogRepository
+    private val activityLogRepository: ActivityLogRepository,
+    private val syncManager: SyncManager
 ) : ViewModel() {
 
     // Caches to prevent creating new StateFlows on every recomposition
@@ -194,6 +196,10 @@ class LoanViewModel @Inject constructor(
         }
         return try {
             repository.addGivenTransaction(personId, amount, date)
+            val customerName = repository.getCustomerNameForPerson(personId) ?: "Customer"
+            val fileName = repository.getFileNameForPerson(personId) ?: ""
+            val person = repository.getPersonById(personId)
+            val fileInfo = if (fileName.isNotBlank()) " in file '$fileName'" else ""
             authManager.currentUser.value?.let { user ->
                 activityLogRepository.logActivity(
                     businessId = authManager.businessId.value,
@@ -201,9 +207,16 @@ class LoanViewModel @Inject constructor(
                     actorName = authManager.getEffectiveUserName(),
                     actorRole = role,
                     action = "LOAN_GIVEN",
-                    details = "Gave loan amount of ₹$amount",
+                    recordType = "LOAN",
+                    recordSharedId = person?.sharedId,
+                    fileName = fileName.takeIf { it.isNotBlank() },
+                    fileSharedId = person?.fileSharedId,
+                    details = "Gave loan amount of ₹${"%.0f".format(amount)} to '$customerName'$fileInfo",
                     outcome = "SUCCESS"
                 )
+            }
+            viewModelScope.launch {
+                syncManager.syncWithCloud(authManager.businessId.value, role)
             }
             Result.success(Unit)
         } catch (e: Exception) {
@@ -219,6 +232,10 @@ class LoanViewModel @Inject constructor(
         }
         return try {
             repository.addReceivedTransaction(personId, amount, date)
+            val customerName = repository.getCustomerNameForPerson(personId) ?: "Customer"
+            val fileName = repository.getFileNameForPerson(personId) ?: ""
+            val person = repository.getPersonById(personId)
+            val fileInfo = if (fileName.isNotBlank()) " in file '$fileName'" else ""
             authManager.currentUser.value?.let { user ->
                 activityLogRepository.logActivity(
                     businessId = authManager.businessId.value,
@@ -226,9 +243,16 @@ class LoanViewModel @Inject constructor(
                     actorName = authManager.getEffectiveUserName(),
                     actorRole = role,
                     action = "PAYMENT_RECORDED",
-                    details = "Collected payment of ₹$amount",
+                    recordType = "PAYMENT",
+                    recordSharedId = person?.sharedId,
+                    fileName = fileName.takeIf { it.isNotBlank() },
+                    fileSharedId = person?.fileSharedId,
+                    details = "Collected payment of ₹${"%.0f".format(amount)} from '$customerName'$fileInfo",
                     outcome = "SUCCESS"
                 )
+            }
+            viewModelScope.launch {
+                syncManager.syncWithCloud(authManager.businessId.value, role)
             }
             Result.success(Unit)
         } catch (e: Exception) {

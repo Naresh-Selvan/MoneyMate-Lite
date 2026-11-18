@@ -1,6 +1,6 @@
 {
-  "latestVersionCode": 35,
-  "latestVersionName": "1.0.35",
+  "latestVersionCode": 36,
+  "latestVersionName": "1.0.36",
   "updateUrl": "https://github.com/Naresh-Selvan/MoneyMate-Lite/releases/latest",
-  "changelog": "Fix real-time multi-device sync for pending approvals and activity history, resolve correct file names on proposals, and fix existing local file sync visibility."
+  "changelog": "Fix Export PDF layout & download button, fast incremental cloud sync (<300ms), fix Nov 14 balance discrepancy, detailed activity history dialog with customer & collector breakdown, and fix pending approvals real-time updates."
 }

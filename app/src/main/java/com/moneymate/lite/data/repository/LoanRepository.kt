@@ -31,25 +31,42 @@ class LoanRepository @Inject constructor(
         if (activeLoan != null) {
             throw IllegalStateException("Person already has an active loan")
         }
+        val person = database.personDao().getPersonById(personId)
+        val bizId = person?.businessId ?: ""
+        val pSharedId = person?.sharedId ?: "person_$personId"
         loanDao.insert(
             Loan(
+                sharedId = "loan_${System.currentTimeMillis()}_${java.util.UUID.randomUUID().toString().take(8)}",
+                businessId = bizId,
                 personId = personId,
+                personSharedId = pSharedId,
                 totalAmount = totalAmount,
-                dateGiven = dateGiven
+                dateGiven = dateGiven,
+                createdAt = System.currentTimeMillis(),
+                lastModified = System.currentTimeMillis(),
+                syncStatus = "PENDING_SYNC"
             )
         )
     }
 
     suspend fun recordPayment(loanId: Long, amount: Double, date: Long) = withContext(Dispatchers.IO) {
         database.withTransaction {
+            val loan = loanDao.getLoanById(loanId)
+            val bizId = loan?.businessId ?: ""
+            val lSharedId = loan?.sharedId ?: "loan_$loanId"
             paymentDao.insert(
                 Payment(
+                    sharedId = "payment_${System.currentTimeMillis()}_${java.util.UUID.randomUUID().toString().take(8)}",
+                    businessId = bizId,
                     loanId = loanId,
+                    loanSharedId = lSharedId,
                     amount = amount,
-                    date = date
+                    date = date,
+                    createdAt = System.currentTimeMillis(),
+                    lastModified = System.currentTimeMillis(),
+                    syncStatus = "PENDING_SYNC"
                 )
             )
-            val loan = loanDao.getLoanById(loanId)
             if (loan != null) {
                 val totalPaid = paymentDao.getTotalPaidForLoan(loanId)
                 if (totalPaid >= loan.totalAmount) {
@@ -65,21 +82,28 @@ class LoanRepository @Inject constructor(
         date: Long,
         workerId: String,
         workerName: String,
-        syncStatus: String = "SYNCED"
+        syncStatus: String = "PENDING_SYNC"
     ): Long = withContext(Dispatchers.IO) {
         database.withTransaction {
+            val loan = loanDao.getLoanById(loanId)
+            val bizId = loan?.businessId ?: ""
+            val lSharedId = loan?.sharedId ?: "loan_$loanId"
             val paymentId = paymentDao.insert(
                 Payment(
+                    sharedId = "payment_${System.currentTimeMillis()}_${java.util.UUID.randomUUID().toString().take(8)}",
+                    businessId = bizId,
                     loanId = loanId,
+                    loanSharedId = lSharedId,
                     amount = amount,
                     date = date,
                     recordedByWorkerId = workerId,
                     recordedByWorkerName = workerName,
+                    createdAt = System.currentTimeMillis(),
+                    lastModified = System.currentTimeMillis(),
                     syncStatus = syncStatus
                 )
             )
-            val loan = loanDao.getLoanById(loanId)
-            if (loan != null && syncStatus == "SYNCED") {
+            if (loan != null) {
                 val totalPaid = paymentDao.getTotalPaidForLoan(loanId)
                 if (totalPaid >= loan.totalAmount) {
                     loanDao.markCompleted(loanId, System.currentTimeMillis())
@@ -160,11 +184,18 @@ class LoanRepository @Inject constructor(
     suspend fun addGivenTransaction(personId: Long, amount: Double, date: Long) = withContext(Dispatchers.IO) {
         database.withTransaction {
             val activeLoan = loanDao.getActiveLoanByPerson(personId)
+            val person = database.personDao().getPersonById(personId)
+            val bizId = person?.businessId ?: ""
+            val pSharedId = person?.sharedId ?: "person_$personId"
+
             if (activeLoan != null) {
                 val updatedLoan = activeLoan.copy(
                     totalAmount = activeLoan.totalAmount + amount,
                     dateGiven = date,
-                    lastModified = System.currentTimeMillis()
+                    businessId = if (activeLoan.businessId.isBlank()) bizId else activeLoan.businessId,
+                    personSharedId = if (activeLoan.personSharedId.isBlank()) pSharedId else activeLoan.personSharedId,
+                    lastModified = System.currentTimeMillis(),
+                    syncStatus = "PENDING_SYNC"
                 )
                 loanDao.update(updatedLoan)
                 
@@ -181,9 +212,15 @@ class LoanRepository @Inject constructor(
             } else {
                 loanDao.insert(
                     Loan(
+                        sharedId = "loan_${System.currentTimeMillis()}_${java.util.UUID.randomUUID().toString().take(8)}",
+                        businessId = bizId,
                         personId = personId,
+                        personSharedId = pSharedId,
                         totalAmount = amount,
-                        dateGiven = date
+                        dateGiven = date,
+                        createdAt = System.currentTimeMillis(),
+                        lastModified = System.currentTimeMillis(),
+                        syncStatus = "PENDING_SYNC"
                     )
                 )
             }
@@ -194,12 +231,21 @@ class LoanRepository @Inject constructor(
         database.withTransaction {
             val activeLoan = loanDao.getActiveLoanByPerson(personId)
                 ?: throw IllegalStateException("No active loan found for this customer.")
+            val person = database.personDao().getPersonById(personId)
+            val bizId = activeLoan.businessId.ifBlank { person?.businessId ?: "" }
+            val lSharedId = activeLoan.sharedId.ifBlank { "loan_${activeLoan.id}" }
             
             paymentDao.insert(
                 Payment(
+                    sharedId = "payment_${System.currentTimeMillis()}_${java.util.UUID.randomUUID().toString().take(8)}",
+                    businessId = bizId,
                     loanId = activeLoan.id,
+                    loanSharedId = lSharedId,
                     amount = amount,
-                    date = date
+                    date = date,
+                    createdAt = System.currentTimeMillis(),
+                    lastModified = System.currentTimeMillis(),
+                    syncStatus = "PENDING_SYNC"
                 )
             )
             
@@ -213,7 +259,11 @@ class LoanRepository @Inject constructor(
     suspend fun updateLoanAmount(loanId: Long, newAmount: Double) = withContext(Dispatchers.IO) {
         database.withTransaction {
             val loan = loanDao.getLoanById(loanId) ?: return@withTransaction
-            val updatedLoan = loan.copy(totalAmount = newAmount, lastModified = System.currentTimeMillis())
+            val updatedLoan = loan.copy(
+                totalAmount = newAmount, 
+                lastModified = System.currentTimeMillis(),
+                syncStatus = "PENDING_SYNC"
+            )
             loanDao.update(updatedLoan)
             
             val totalPaid = paymentDao.getTotalPaidForLoan(loanId)
@@ -329,6 +379,10 @@ class LoanRepository @Inject constructor(
 
     suspend fun getCustomerNameForPerson(personId: Long): String? = withContext(Dispatchers.IO) {
         database.personDao().getPersonById(personId)?.name
+    }
+
+    suspend fun getPersonById(personId: Long): com.moneymate.lite.data.entity.Person? = withContext(Dispatchers.IO) {
+        database.personDao().getPersonById(personId)
     }
 
     suspend fun getFileNameForPerson(personId: Long): String? = withContext(Dispatchers.IO) {

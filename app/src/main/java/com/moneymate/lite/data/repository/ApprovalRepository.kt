@@ -449,6 +449,7 @@ class ApprovalRepository @Inject constructor(
 
                     PendingActionType.EDIT_LOAN.name -> {
                         val loan = loanDao.getLoanBySharedId(request.recordSharedId ?: "")
+                            ?: request.recordSharedId?.removePrefix("loan_")?.toLongOrNull()?.let { loanDao.getLoanById(it) }
                             ?: throw IllegalStateException("Loan not found")
                         val newAmount = payload.optDouble("amount", loan.totalAmount)
                         val newDate = payload.optLong("date", loan.dateGiven)
@@ -469,6 +470,7 @@ class ApprovalRepository @Inject constructor(
 
                     PendingActionType.EDIT_PAYMENT.name -> {
                         val payment = paymentDao.getPaymentBySharedId(request.recordSharedId ?: "")
+                            ?: request.recordSharedId?.removePrefix("payment_")?.toLongOrNull()?.let { paymentDao.getPaymentById(it) }
                             ?: throw IllegalStateException("Payment not found")
                         val newAmount = payload.optDouble("amount", payment.amount)
                         val newDate = payload.optLong("date", payment.date)
@@ -497,6 +499,7 @@ class ApprovalRepository @Inject constructor(
 
                     PendingActionType.DELETE_CUSTOMER.name -> {
                         val person = personDao.getPersonBySharedId(request.recordSharedId ?: "")
+                            ?: request.recordSharedId?.removePrefix("person_")?.toLongOrNull()?.let { personDao.getPersonById(it) }
                             ?: throw IllegalStateException("Customer not found")
                         personDao.softDelete(person.id)
                         loanDao.softDeleteLoansForPerson(person.id)
@@ -506,6 +509,7 @@ class ApprovalRepository @Inject constructor(
 
                     PendingActionType.DELETE_LOAN.name -> {
                         val loan = loanDao.getLoanBySharedId(request.recordSharedId ?: "")
+                            ?: request.recordSharedId?.removePrefix("loan_")?.toLongOrNull()?.let { loanDao.getLoanById(it) }
                             ?: throw IllegalStateException("Loan not found")
                         loanDao.softDeleteLoan(loan.id)
                         paymentDao.softDeletePaymentsForLoan(loan.id)
@@ -515,6 +519,7 @@ class ApprovalRepository @Inject constructor(
 
                     PendingActionType.DELETE_PAYMENT.name -> {
                         val payment = paymentDao.getPaymentBySharedId(request.recordSharedId ?: "")
+                            ?: request.recordSharedId?.removePrefix("payment_")?.toLongOrNull()?.let { paymentDao.getPaymentById(it) }
                             ?: throw IllegalStateException("Payment not found")
                         paymentDao.softDelete(payment.id)
                         deletedCollection = "payments"
@@ -673,21 +678,30 @@ class ApprovalRepository @Inject constructor(
         return try {
             when (recordType) {
                 "CUSTOMER" -> {
-                    val p = personDao.getPersonBySharedId(recordSharedId) ?: return true
+                    val p = personDao.getPersonBySharedId(recordSharedId)
+                        ?: recordSharedId.removePrefix("person_").toLongOrNull()?.let { personDao.getPersonById(it) }
+                        ?: return false
                     if (p.isDeleted != baseSnapshot.optBoolean("isDeleted", false)) return true
-                    if (p.name != baseSnapshot.optString("name", p.name)) return true
+                    val baseName = baseSnapshot.optString("name")
+                    if (baseName.isNotBlank() && p.name != baseName) return true
                     false
                 }
                 "LOAN" -> {
-                    val l = loanDao.getLoanBySharedId(recordSharedId) ?: return true
+                    val l = loanDao.getLoanBySharedId(recordSharedId)
+                        ?: recordSharedId.removePrefix("loan_").toLongOrNull()?.let { loanDao.getLoanById(it) }
+                        ?: return false
                     if (l.isDeleted != baseSnapshot.optBoolean("isDeleted", false)) return true
-                    if (l.totalAmount != baseSnapshot.optDouble("totalAmount", l.totalAmount)) return true
+                    val baseAmt = baseSnapshot.optDouble("amount", baseSnapshot.optDouble("totalAmount", -1.0))
+                    if (baseAmt > 0 && Math.abs(l.totalAmount - baseAmt) > 0.01) return true
                     false
                 }
                 "PAYMENT" -> {
-                    val pay = paymentDao.getPaymentBySharedId(recordSharedId) ?: return true
+                    val pay = paymentDao.getPaymentBySharedId(recordSharedId)
+                        ?: recordSharedId.removePrefix("payment_").toLongOrNull()?.let { paymentDao.getPaymentById(it) }
+                        ?: return false
                     if (pay.isDeleted != baseSnapshot.optBoolean("isDeleted", false)) return true
-                    if (pay.amount != baseSnapshot.optDouble("amount", pay.amount)) return true
+                    val baseAmt = baseSnapshot.optDouble("amount", -1.0)
+                    if (baseAmt > 0 && Math.abs(pay.amount - baseAmt) > 0.01) return true
                     false
                 }
                 else -> false

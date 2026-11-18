@@ -138,6 +138,15 @@ interface PaymentDao {
     @Query("SELECT * FROM payments")
     suspend fun getAllPaymentsIncludingDeleted(): List<Payment>
 
+    @Query("""
+        UPDATE payments 
+        SET loanId = (SELECT id FROM loans WHERE loans.sharedId = payments.loanSharedId LIMIT 1) 
+        WHERE loanSharedId IS NOT NULL 
+          AND loanSharedId != '' 
+          AND (SELECT id FROM loans WHERE loans.sharedId = payments.loanSharedId LIMIT 1) IS NOT NULL
+    """)
+    suspend fun relinkPaymentsToLocalLoans(): Int
+
     @Query("DELETE FROM payments")
     suspend fun clearAll()
 }

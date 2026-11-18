@@ -95,6 +95,15 @@ interface PersonDao {
     @Query("SELECT * FROM persons")
     suspend fun getAllPersonsIncludingDeleted(): List<Person>
 
+    @Query("""
+        UPDATE persons 
+        SET fileId = (SELECT id FROM loan_files WHERE loan_files.sharedId = persons.fileSharedId LIMIT 1) 
+        WHERE fileSharedId IS NOT NULL 
+          AND fileSharedId != '' 
+          AND (SELECT id FROM loan_files WHERE loan_files.sharedId = persons.fileSharedId LIMIT 1) IS NOT NULL
+    """)
+    suspend fun relinkPersonsToLocalFiles(): Int
+
     @Query("DELETE FROM persons")
     suspend fun clearAll()
 }

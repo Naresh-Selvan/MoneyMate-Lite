@@ -155,6 +155,21 @@ interface LoanDao {
     @Query("SELECT * FROM loans")
     suspend fun getAllLoansIncludingDeleted(): List<Loan>
 
+    @Query("SELECT * FROM loans WHERE syncStatus = 'PENDING_SYNC'")
+    suspend fun getLoansPendingSync(): List<Loan>
+
+    @Query("UPDATE loans SET syncStatus = :status, lastModified = :modified WHERE id = :id")
+    suspend fun updateSyncStatus(id: Long, status: String, modified: Long = System.currentTimeMillis())
+
+    @Query("""
+        UPDATE loans 
+        SET personId = (SELECT id FROM persons WHERE persons.sharedId = loans.personSharedId LIMIT 1) 
+        WHERE personSharedId IS NOT NULL 
+          AND personSharedId != '' 
+          AND (SELECT id FROM persons WHERE persons.sharedId = loans.personSharedId LIMIT 1) IS NOT NULL
+    """)
+    suspend fun relinkLoansToLocalPersons(): Int
+
     @Query("DELETE FROM loans")
     suspend fun clearAll()
 }

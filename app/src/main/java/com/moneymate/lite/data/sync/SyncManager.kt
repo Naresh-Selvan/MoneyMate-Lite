@@ -106,7 +106,18 @@ class SyncManager @Inject constructor(
         }
     }
 
-    suspend fun triggerSync(businessId: String? = null, role: UserRole? = null): Result<Unit> = withContext(Dispatchers.IO) {
+    private val syncPrefs by lazy {
+        context.getSharedPreferences("moneymate_sync_prefs", Context.MODE_PRIVATE)
+    }
+
+    suspend fun syncWithCloud(businessId: String? = null, role: UserRole? = null, forceFullSync: Boolean = false): Result<Unit> =
+        triggerSync(businessId, role, forceFullSync)
+
+    suspend fun triggerSync(
+        businessId: String? = null,
+        role: UserRole? = null,
+        forceFullSync: Boolean = false
+    ): Result<Unit> = withContext(Dispatchers.IO) {
         if (!_isOnline.value) {
             refreshPendingCounts()
             return@withContext Result.failure(IllegalStateException("Device is offline"))
@@ -125,6 +136,7 @@ class SyncManager @Inject constructor(
 
         _isSyncing.value = true
         val errors = mutableListOf<String>()
+        val syncStartTime = System.currentTimeMillis()
 
         try {
             val db = FirebaseFirestore.getInstance()
@@ -203,10 +215,48 @@ class SyncManager @Inject constructor(
                 }
             }
 
-            // 3. Pull updates from Firestore for authorized records
-            pullUpdatesFromCloud(activeBizId, userDoc, userRole)
+            // 2b. Process pending offline loans
+            val pendingLoans = loanDao.getLoansPendingSync()
+            for (loan in pendingLoans) {
+                try {
+                    val loanRef = db.collection("businesses").document(activeBizId)
+                        .collection("loans").document(loan.sharedId)
+                    val loanData = hashMapOf(
+                        "sharedId" to loan.sharedId,
+                        "businessId" to activeBizId,
+                        "personId" to loan.personId,
+                        "personSharedId" to loan.personSharedId,
+                        "totalAmount" to loan.totalAmount,
+                        "dateGiven" to loan.dateGiven,
+                        "isCompleted" to loan.isCompleted,
+                        "completedAt" to loan.completedAt,
+                        "createdAt" to loan.createdAt,
+                        "lastModified" to System.currentTimeMillis(),
+                        "isDeleted" to loan.isDeleted
+                    )
+                    loanRef.set(loanData, SetOptions.merge()).await()
+                    loanDao.updateSyncStatus(loan.id, "SYNCED")
+                } catch (e: Exception) {
+                    val errMsg = "Sync failed for loan ${loan.sharedId}: ${e.message}"
+                    errors.add(errMsg)
+                }
+            }
 
-            _lastSyncTime.value = System.currentTimeMillis()
+            // 3. Pull updates from Firestore for authorized records (fast incremental sync)
+            val lastSyncKey = "last_sync_$activeBizId"
+            val lastSync = syncPrefs.getLong(lastSyncKey, 0L)
+            val isFirstSync = loanFileDao.getAllFilesIncludingDeleted().isEmpty() || lastSync == 0L
+            val cutoff = if (forceFullSync || isFirstSync) 0L else maxOf(0L, lastSync - 60_000L)
+
+            pullUpdatesFromCloud(activeBizId, userDoc, userRole, cutoff)
+
+            // Auto-heal relational foreign keys in local SQLite
+            personDao.relinkPersonsToLocalFiles()
+            loanDao.relinkLoansToLocalPersons()
+            paymentDao.relinkPaymentsToLocalLoans()
+
+            syncPrefs.edit().putLong(lastSyncKey, syncStartTime).apply()
+            _lastSyncTime.value = syncStartTime
             _syncErrors.value = errors
             refreshPendingCounts()
 
@@ -224,7 +274,8 @@ class SyncManager @Inject constructor(
     private suspend fun pullUpdatesFromCloud(
         businessId: String,
         userDoc: com.google.firebase.firestore.DocumentSnapshot,
-        userRole: UserRole
+        userRole: UserRole,
+        cutoffTime: Long
     ) {
         val db = FirebaseFirestore.getInstance()
         val accessAll = userDoc.getBoolean("accessAllFiles") ?: true
@@ -233,7 +284,12 @@ class SyncManager @Inject constructor(
         val bizRef = db.collection("businesses").document(businessId)
 
         // 1. Pull files
-        val filesSnapshot = bizRef.collection("files").get().await()
+        val filesQuery = if (cutoffTime > 0L) {
+            bizRef.collection("files").whereGreaterThan("lastModified", cutoffTime)
+        } else {
+            bizRef.collection("files")
+        }
+        val filesSnapshot = filesQuery.get().await()
         for (fileDoc in filesSnapshot.documents) {
             val fileSharedId = fileDoc.getString("sharedId") ?: fileDoc.id
             if (userRole == UserRole.WORKER && !accessAll && fileSharedId !in allowedFileIds) {
@@ -284,7 +340,12 @@ class SyncManager @Inject constructor(
         }
 
         // 2. Pull persons / customers
-        val personsSnapshot = bizRef.collection("persons").get().await()
+        val personsQuery = if (cutoffTime > 0L) {
+            bizRef.collection("persons").whereGreaterThan("lastModified", cutoffTime)
+        } else {
+            bizRef.collection("persons")
+        }
+        val personsSnapshot = personsQuery.get().await()
         for (pDoc in personsSnapshot.documents) {
             val pSharedId = pDoc.getString("sharedId") ?: pDoc.id
             val fileSharedId = pDoc.getString("fileSharedId") ?: ""
@@ -345,7 +406,12 @@ class SyncManager @Inject constructor(
         val localPersons = personDao.getAllPersonsIncludingDeleted().associateBy { it.sharedId }
 
         // 3. Pull loans
-        val loansSnapshot = bizRef.collection("loans").get().await()
+        val loansQuery = if (cutoffTime > 0L) {
+            bizRef.collection("loans").whereGreaterThan("lastModified", cutoffTime)
+        } else {
+            bizRef.collection("loans")
+        }
+        val loansSnapshot = loansQuery.get().await()
         for (lDoc in loansSnapshot.documents) {
             val lSharedId = lDoc.getString("sharedId") ?: lDoc.id
             val personSharedId = lDoc.getString("personSharedId") ?: ""
@@ -356,7 +422,6 @@ class SyncManager @Inject constructor(
             val localPersonId = localPerson?.id ?: lDoc.getLong("personId") ?: 0L
 
             val existing = loanDao.getLoanBySharedId(lSharedId)
-                ?: if (localPersonId > 0) loanDao.getAllLoansIncludingDeleted().firstOrNull { it.personId == localPersonId } else null
             val totalAmount = lDoc.getDouble("totalAmount") ?: 0.0
             val dateGiven = lDoc.getLong("dateGiven") ?: System.currentTimeMillis()
             val isCompleted = lDoc.getBoolean("isCompleted") ?: false
@@ -405,7 +470,12 @@ class SyncManager @Inject constructor(
         val localLoans = loanDao.getAllLoansIncludingDeleted().associateBy { it.sharedId }
 
         // 4. Pull payments
-        val paymentsSnapshot = bizRef.collection("payments").get().await()
+        val paymentsQuery = if (cutoffTime > 0L) {
+            bizRef.collection("payments").whereGreaterThan("lastModified", cutoffTime)
+        } else {
+            bizRef.collection("payments")
+        }
+        val paymentsSnapshot = paymentsQuery.get().await()
         for (payDoc in paymentsSnapshot.documents) {
             val paySharedId = payDoc.getString("sharedId") ?: payDoc.id
             val loanSharedId = payDoc.getString("loanSharedId") ?: ""
@@ -462,7 +532,12 @@ class SyncManager @Inject constructor(
 
         // 5. Pull approval requests
         try {
-            val approvalsSnapshot = bizRef.collection("approval_requests").get().await()
+            val approvalsQuery = if (cutoffTime > 0L) {
+                bizRef.collection("approval_requests").whereGreaterThan("requestedAt", cutoffTime)
+            } else {
+                bizRef.collection("approval_requests")
+            }
+            val approvalsSnapshot = approvalsQuery.get().await()
             for (aDoc in approvalsSnapshot.documents) {
                 val req = ApprovalRequestEntity.fromDocument(aDoc, businessId)
                 approvalRequestDao.insert(req)
@@ -474,10 +549,17 @@ class SyncManager @Inject constructor(
         // 6. Pull activity logs (Owner only)
         if (userRole == UserRole.OWNER) {
             try {
-                val logsSnapshot = bizRef.collection("activity_logs")
-                    .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                    .limit(100)
-                    .get().await()
+                val logsQuery = if (cutoffTime > 0L) {
+                    bizRef.collection("activity_logs")
+                        .whereGreaterThan("timestamp", cutoffTime)
+                        .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                        .limit(100)
+                } else {
+                    bizRef.collection("activity_logs")
+                        .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                        .limit(100)
+                }
+                val logsSnapshot = logsQuery.get().await()
                 for (lDoc in logsSnapshot.documents) {
                     val log = ActivityLogEntity.fromDocument(lDoc, businessId)
                     activityLogDao.insert(log)

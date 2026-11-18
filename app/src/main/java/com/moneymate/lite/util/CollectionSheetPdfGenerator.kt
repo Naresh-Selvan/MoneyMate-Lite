@@ -44,18 +44,21 @@ object CollectionSheetPdfGenerator {
     // Total usable width = 612 - 40 = 572
     // Each table width = (572 - 14) / 2 = 279
     private const val TABLE_WIDTH = 279f
-    private const val NAME_COL_WIDTH = 90f
-    private const val BALANCE_COL_WIDTH = 32f // Reduced space for amount column!
-    // 7 empty writing cells for collections: (279 - 90 - 32) / 7 = 157 / 7 = ~22.43f each
-    private const val EMPTY_CELL_WIDTH = 22.43f
+    private const val NAME_COL_WIDTH = 70f // Reduced space for customer name to eliminate large gap
+    private const val BALANCE_COL_WIDTH = 38f // Small box for amount (cleanly fits amounts up to 6 digits)
+    // 7 empty writing cells for collections: (279 - 70 - 38) / 7 = 171 / 7 = ~24.43f each (expanded boxes!)
+    private const val EMPTY_CELL_WIDTH = 24.43f
     private const val EMPTY_CELLS_COUNT = 7
 
     private const val DATA_ROW_HEIGHT = 24.2f
 
     // Available height for rows: 1008 - 20 - 20 = 968
-    // 968 / 24.2 = 40 rows per column, 80 per page
+    // 968 / 24.2 = 40 rows per column, 80 rows per page
     private const val ROWS_PER_COLUMN = 40
-    private const val ITEMS_PER_PAGE = ROWS_PER_COLUMN * 2 // 80 per page
+    private const val CUSTOMERS_PER_BLOCK = 8
+    // 4 blocks of (8 customers + 1 empty separator row) + 4 customers = 36 customers + 4 empty rows = 40 rows
+    private const val CUSTOMERS_PER_COLUMN = 36
+    private const val ITEMS_PER_PAGE = CUSTOMERS_PER_COLUMN * 2 // 72 customers per Legal page
 
     fun generatePdf(
         context: Context,
@@ -168,10 +171,10 @@ object CollectionSheetPdfGenerator {
 
         var y = startY
 
-        // Data Rows start immediately from row 1 with NO heading row
-        val rowCount = maxOf(rows.size, if (rows.isNotEmpty()) ROWS_PER_COLUMN else 0)
-        for (rowIndex in 0 until rowCount) {
-            val row = rows.getOrNull(rowIndex)
+        // Build 40 rows with an empty separator row after every 8 customer rows
+        val tableRows = buildTableRows(rows)
+
+        for (row in tableRows) {
             val rowTop = y
             val rowBottom = y + DATA_ROW_HEIGHT
 
@@ -184,7 +187,7 @@ object CollectionSheetPdfGenerator {
                 canvas.drawLine(xBoxes[i], rowTop, xBoxes[i], rowBottom, borderPaint)
             }
 
-            if (row != null) {
+            if (row != null && row.customerName.isNotBlank()) {
                 val textBaseline = rowTop + DATA_ROW_HEIGHT / 2f + 3.5f
 
                 // Formatted customer name with trailing '-' as in Word template
@@ -198,7 +201,7 @@ object CollectionSheetPdfGenerator {
                 ).toString()
                 canvas.drawText(ellipsizedName, xName + 3f, textBaseline, textPaint)
 
-                // Formatted balance in reduced amount column: NO rupee symbol!
+                // Formatted balance in amount column: NO rupee symbol!
                 if (row.balance > 0) {
                     val balanceText = "%.0f".format(row.balance)
                     val textWidth = balancePaint.measureText(balanceText)
@@ -211,6 +214,23 @@ object CollectionSheetPdfGenerator {
 
             y += DATA_ROW_HEIGHT
         }
+    }
+
+    private fun buildTableRows(customers: List<CollectionSheetRow>): List<CollectionSheetRow?> {
+        val result = mutableListOf<CollectionSheetRow?>()
+        var count = 0
+        for (c in customers) {
+            if (count > 0 && count % CUSTOMERS_PER_BLOCK == 0) {
+                result.add(null) // Empty separator row after every 8 customer rows
+            }
+            result.add(c)
+            count++
+            if (result.size >= ROWS_PER_COLUMN) break
+        }
+        while (result.size < ROWS_PER_COLUMN) {
+            result.add(null)
+        }
+        return result
     }
 
     fun shareOrOpenPdf(context: Context, pdfFile: File, title: String) {
