@@ -262,6 +262,7 @@ class SyncManager @Inject constructor(
             personDao.relinkPersonsToLocalFiles()
             loanDao.relinkLoansToLocalPersons()
             paymentDao.relinkPaymentsToLocalLoans()
+            autoHealDuplicatePersons(activeBizId, db)
 
             if (isSchemaUpgrade) {
                 syncPrefs.edit().putInt("sync_schema_version", 37).apply()
@@ -363,12 +364,22 @@ class SyncManager @Inject constructor(
             if (fileSharedId.isNotBlank() && fileSharedId !in allowedLocalFileSharedIds) {
                 continue
             }
-            val localFile = localFiles[fileSharedId]
-            val localFileId = localFile?.id ?: pDoc.getLong("fileId") ?: 0L
+            val localFile = if (fileSharedId.isNotBlank()) localFiles[fileSharedId] else null
+            val localFileId = localFile?.id
+                ?: (pDoc.getLong("fileId")?.takeIf { it > 0 })
+                ?: localFiles.values.firstOrNull()?.id
+                ?: 0L
 
-            val name = pDoc.getString("name") ?: ""
+            val rawName = pDoc.getString("name") ?: ""
+            val cleanName = rawName.trim().removeSuffix("-").trim()
+            val allLocalPersons = personDao.getAllPersonsIncludingDeleted()
             val existing = personDao.getPersonBySharedId(pSharedId)
-                ?: if (localFileId > 0) personDao.getAllPersonsIncludingDeleted().firstOrNull { it.fileId == localFileId && it.name.trim().equals(name.trim(), ignoreCase = true) } else null
+                ?: (if (localFileId > 0) allLocalPersons.firstOrNull {
+                    it.fileId == localFileId && it.name.trim().removeSuffix("-").trim().equals(cleanName, ignoreCase = true)
+                } else null)
+                ?: allLocalPersons.firstOrNull {
+                    it.name.trim().removeSuffix("-").trim().equals(cleanName, ignoreCase = true)
+                }
             val mobile = pDoc.getString("mobileNumber")
             val place = pDoc.getString("place")
             val notes = pDoc.getString("notes")
@@ -378,34 +389,41 @@ class SyncManager @Inject constructor(
             val lastModified = pDoc.getLong("lastModified") ?: System.currentTimeMillis()
 
             if (existing == null) {
+                val maxSort = allLocalPersons.filter { it.fileId == localFileId && !it.isDeleted }.maxOfOrNull { it.sortOrder } ?: 0
+                val finalSortOrder = if (sortOrder > 0) sortOrder else (maxSort + 1)
                 personDao.insert(
                     Person(
                         sharedId = pSharedId,
                         businessId = businessId,
                         fileId = localFileId,
                         fileSharedId = fileSharedId,
-                        name = name,
+                        name = rawName,
                         mobileNumber = mobile,
                         place = place,
                         notes = notes,
-                        sortOrder = sortOrder,
+                        sortOrder = finalSortOrder,
                         createdAt = createdAt,
                         lastModified = lastModified,
                         isDeleted = isDeleted
                     )
                 )
             } else {
+                val finalSortOrder = when {
+                    existing.sortOrder > 0 && sortOrder == 0 -> existing.sortOrder
+                    sortOrder > 0 -> sortOrder
+                    else -> existing.sortOrder
+                }
                 personDao.update(
                     existing.copy(
                         sharedId = pSharedId,
                         businessId = businessId,
-                        fileId = localFileId,
-                        fileSharedId = fileSharedId,
-                        name = name,
-                        mobileNumber = mobile,
-                        place = place,
-                        notes = notes,
-                        sortOrder = sortOrder,
+                        fileId = if (localFileId > 0) localFileId else existing.fileId,
+                        fileSharedId = if (fileSharedId.isNotBlank()) fileSharedId else existing.fileSharedId,
+                        name = existing.name.ifBlank { rawName },
+                        mobileNumber = mobile ?: existing.mobileNumber,
+                        place = place ?: existing.place,
+                        notes = notes ?: existing.notes,
+                        sortOrder = finalSortOrder,
                         isDeleted = isDeleted,
                         lastModified = maxOf(lastModified, existing.lastModified)
                     )
@@ -578,6 +596,49 @@ class SyncManager @Inject constructor(
             } catch (e: Exception) {
                 // Handled
             }
+        }
+    }
+
+    private suspend fun autoHealDuplicatePersons(businessId: String, db: FirebaseFirestore) {
+        try {
+            val allPersons = personDao.getAllPersonsIncludingDeleted().filter { !it.isDeleted }
+            val allLoans = loanDao.getAllLoansIncludingDeleted().filter { !it.isDeleted }
+            val now = System.currentTimeMillis()
+
+            val grouped = allPersons.groupBy { Pair(it.fileId, it.name.trim().removeSuffix("-").trim().lowercase()) }
+            for ((_, group) in grouped) {
+                if (group.size <= 1) continue
+
+                // Find keeper: prefer person with active loans, then sortOrder > 0, then highest sortOrder, then lowest ID
+                val keeper = group.maxWithOrNull(
+                    compareBy<Person> { p -> allLoans.any { it.personId == p.id } }
+                        .thenBy { it.sortOrder > 0 }
+                        .thenBy { it.sortOrder }
+                        .thenByDescending { -it.id }
+                ) ?: group.first()
+
+                val duplicates = group.filter { it.id != keeper.id }
+                for (dup in duplicates) {
+                    val loansToRelink = allLoans.filter { it.personId == dup.id }
+                    for (l in loansToRelink) {
+                        loanDao.update(l.copy(personId = keeper.id, personSharedId = keeper.sharedId, lastModified = now))
+                    }
+
+                    personDao.softDelete(dup.id, now)
+
+                    if (businessId.isNotBlank() && dup.sharedId.isNotBlank()) {
+                        try {
+                            db.collection("businesses").document(businessId)
+                                .collection("persons").document(dup.sharedId)
+                                .update(mapOf("isDeleted" to true, "lastModified" to now))
+                        } catch (e: Exception) {
+                            // Non-fatal if offline
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 }
