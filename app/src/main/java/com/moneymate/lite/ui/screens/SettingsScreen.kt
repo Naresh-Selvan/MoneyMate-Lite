@@ -92,6 +92,7 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     var showRestoreConfirm by remember { mutableStateOf(false) }
     var showMigrationDialog by remember { mutableStateOf(false) }
+    var showDuplicateReview by remember { mutableStateOf(false) }
 
     val themeManager = LocalThemeManager.current
     val isDarkMode by themeManager.isDarkMode.collectAsState()
@@ -202,6 +203,16 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
+
+                OutlinedButton(
+                    onClick = { showDuplicateReview = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Review possible duplicate customers")
+                }
+                if (showDuplicateReview) {
+                    CustomerDuplicateDialog(settingsViewModel) { showDuplicateReview = false }
+                }
 
                 // Manage Workers Card
                 Card(

@@ -358,40 +358,28 @@ class ApprovalRepository @Inject constructor(
                         val file = loanFileDao.getFileBySharedId(request.fileSharedId)
                             ?: throw IllegalStateException("Target file not found")
                         val customerName = payload.getString("customerName")
-                        val cleanName = customerName.trim().removeSuffix("-").trim()
                         val phone = payload.optString("phone").takeIf { it.isNotBlank() }
                         val place = payload.optString("place").takeIf { it.isNotBlank() }
                         val notes = payload.optString("notes").takeIf { it.isNotBlank() }
                         val initialLoanAmount = payload.optDouble("initialLoanAmount", 0.0)
                         val initialLoanDate = payload.optLong("initialLoanDate", now)
 
-                        val existingPersonInFile = personDao.getActivePersonsList(file.id).firstOrNull {
-                            it.name.trim().removeSuffix("-").trim().equals(cleanName, ignoreCase = true)
-                        }
-
-                        val person = if (existingPersonInFile != null) {
-                            existingPersonInFile
-                        } else {
-                            val personSharedId = UUID.randomUUID().toString()
-                            val maxSort = personDao.getActivePersonsList(file.id).maxOfOrNull { it.sortOrder } ?: 0
-                            val newPerson = Person(
-                                sharedId = personSharedId,
-                                businessId = request.businessId,
-                                fileId = file.id,
-                                fileSharedId = file.sharedId,
-                                name = customerName,
-                                mobileNumber = phone,
-                                place = place,
-                                notes = notes,
-                                sortOrder = maxSort + 1,
-                                createdAt = now,
-                                lastModified = now
-                            )
-                            val insertedId = personDao.insert(newPerson)
-                            val p = newPerson.copy(id = insertedId)
-                            createdPerson = p
-                            p
-                        }
+                        val maxSort = personDao.getActivePersonsList(file.id).maxOfOrNull { it.sortOrder } ?: -1
+                        val newPerson = Person(
+                            sharedId = UUID.randomUUID().toString(),
+                            businessId = request.businessId,
+                            fileId = file.id,
+                            fileSharedId = file.sharedId,
+                            name = customerName,
+                            mobileNumber = phone,
+                            place = place,
+                            notes = notes,
+                            sortOrder = maxSort + 1,
+                            createdAt = now,
+                            lastModified = now
+                        )
+                        val person = newPerson.copy(id = personDao.insert(newPerson))
+                        createdPerson = person
                         val personId = person.id
                         val personSharedId = person.sharedId
 

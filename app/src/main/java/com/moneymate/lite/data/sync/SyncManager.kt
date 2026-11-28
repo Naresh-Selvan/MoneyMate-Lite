@@ -5,9 +5,12 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import androidx.room.withTransaction
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.Source
+import com.moneymate.lite.data.AppDatabase
 import com.moneymate.lite.data.dao.ActivityLogDao
 import com.moneymate.lite.data.dao.ApprovalRequestDao
 import com.moneymate.lite.data.dao.LoanDao
@@ -29,6 +32,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -42,8 +46,11 @@ class SyncManager @Inject constructor(
     private val loanFileDao: LoanFileDao,
     private val personDao: PersonDao,
     private val approvalRequestDao: ApprovalRequestDao,
-    private val activityLogDao: ActivityLogDao
+    private val activityLogDao: ActivityLogDao,
+    private val database: AppDatabase,
+    private val customerDuplicates: CustomerDuplicates
 ) {
+    private val syncLock = Mutex()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val connectivityManager =
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -101,8 +108,6 @@ class SyncManager @Inject constructor(
             val pending = paymentDao.getPaymentsPendingSync()
             _pendingSyncCount.value = pending.count { it.syncStatus == "PENDING_SYNC" }
             _failedSyncCount.value = pending.count { it.syncStatus == "FAILED" }
-            val errors = pending.mapNotNull { it.syncError }.distinct()
-            _syncErrors.value = errors
         }
     }
 
@@ -130,7 +135,7 @@ class SyncManager @Inject constructor(
             return@withContext Result.failure(IllegalStateException("User not authenticated"))
         }
 
-        if (_isSyncing.value) {
+        if (!syncLock.tryLock()) {
             return@withContext Result.success(Unit)
         }
 
@@ -148,7 +153,6 @@ class SyncManager @Inject constructor(
             val userRole = role ?: if (userDoc.getString("role") == "OWNER") UserRole.OWNER else UserRole.WORKER
 
             if (activeBizId.isBlank()) {
-                _isSyncing.value = false
                 return@withContext Result.success(Unit)
             }
 
@@ -258,12 +262,6 @@ class SyncManager @Inject constructor(
 
             pullUpdatesFromCloud(activeBizId, userDoc, userRole, cutoff)
 
-            // Auto-heal relational foreign keys in local SQLite
-            personDao.relinkPersonsToLocalFiles()
-            loanDao.relinkLoansToLocalPersons()
-            paymentDao.relinkPaymentsToLocalLoans()
-            autoHealDuplicatePersons(activeBizId, db)
-
             if (isSchemaUpgrade) {
                 syncPrefs.edit().putInt("sync_schema_version", 37).apply()
             }
@@ -280,6 +278,7 @@ class SyncManager @Inject constructor(
             Result.failure(e)
         } finally {
             _isSyncing.value = false
+            syncLock.unlock()
         }
     }
 
@@ -295,268 +294,254 @@ class SyncManager @Inject constructor(
         val allowedFileIds = (userDoc.get("allowedFileIds") as? List<String>) ?: emptyList()
         val bizRef = db.collection("businesses").document(businessId)
 
-        // 1. Pull files
-        val filesQuery = if (cutoffTime > 0L) {
-            bizRef.collection("files").whereGreaterThan("lastModified", cutoffTime)
-        } else {
-            bizRef.collection("files")
+        // Network reads finish before Room begins publishing changes.
+        suspend fun documents(collection: String) = bizRef.collection(collection).let { ref ->
+            val query = if (cutoffTime > 0L) ref.whereGreaterThan("lastModified", cutoffTime) else ref
+            query.get(Source.SERVER).await().documents
         }
-        val filesSnapshot = filesQuery.get().await()
-        for (fileDoc in filesSnapshot.documents) {
-            val fileSharedId = fileDoc.getString("sharedId") ?: fileDoc.id
-            if (userRole == UserRole.WORKER && !accessAll && fileSharedId !in allowedFileIds) {
-                continue
-            }
-            val name = fileDoc.getString("name") ?: ""
-            val existing = loanFileDao.getFileBySharedId(fileSharedId)
-                ?: loanFileDao.getAllFilesIncludingDeleted().firstOrNull { it.name.trim().equals(name.trim(), ignoreCase = true) }
-            val sortOrder = fileDoc.getLong("sortOrder")?.toInt() ?: 0
-            val isDeleted = fileDoc.getBoolean("isDeleted") ?: false
-            val createdAt = fileDoc.getLong("createdAt") ?: System.currentTimeMillis()
-            val lastModified = fileDoc.getLong("lastModified") ?: System.currentTimeMillis()
+        val files = documents("files")
+        val persons = documents("persons")
+        val loans = documents("loans")
+        val payments = documents("payments")
 
-            if (existing == null) {
-                loanFileDao.insert(
-                    LoanFile(
-                        sharedId = fileSharedId,
-                        businessId = businessId,
-                        name = name,
-                        sortOrder = sortOrder,
-                        createdAt = createdAt,
-                        lastModified = lastModified,
-                        isDeleted = isDeleted,
-                        syncStatus = "SYNCED"
-                    )
-                )
-            } else {
-                loanFileDao.update(
-                    existing.copy(
-                        sharedId = fileSharedId,
-                        businessId = businessId,
-                        name = name,
-                        sortOrder = sortOrder,
-                        isDeleted = isDeleted,
-                        lastModified = maxOf(lastModified, existing.lastModified),
-                        syncStatus = "SYNCED"
-                    )
-                )
-            }
-        }
-
-        // Cache local files by sharedId to correctly link local relational foreign keys
-        val localFiles = loanFileDao.getAllFilesIncludingDeleted().associateBy { it.sharedId }
-        val allowedLocalFileSharedIds = if (userRole == UserRole.WORKER && !accessAll) {
-            allowedFileIds.toSet()
-        } else {
-            localFiles.keys
-        }
-
-        // 2. Pull persons / customers
-        val personsQuery = if (cutoffTime > 0L) {
-            bizRef.collection("persons").whereGreaterThan("lastModified", cutoffTime)
-        } else {
-            bizRef.collection("persons")
-        }
-        val personsSnapshot = personsQuery.get().await()
-        for (pDoc in personsSnapshot.documents) {
-            val pSharedId = pDoc.getString("sharedId") ?: pDoc.id
-            val fileSharedId = pDoc.getString("fileSharedId") ?: ""
-            if (fileSharedId.isNotBlank() && fileSharedId !in allowedLocalFileSharedIds) {
-                continue
-            }
-            val localFile = if (fileSharedId.isNotBlank()) localFiles[fileSharedId] else null
-            val localFileId = localFile?.id
-                ?: (pDoc.getLong("fileId")?.takeIf { it > 0 })
-                ?: localFiles.values.firstOrNull()?.id
-                ?: 0L
-
-            val rawName = pDoc.getString("name") ?: ""
-            val cleanName = rawName.trim().removeSuffix("-").trim()
-            val allLocalPersons = personDao.getAllPersonsIncludingDeleted()
-            val existing = personDao.getPersonBySharedId(pSharedId)
-                ?: (if (localFileId > 0) allLocalPersons.firstOrNull {
-                    it.fileId == localFileId && it.name.trim().removeSuffix("-").trim().equals(cleanName, ignoreCase = true)
-                } else null)
-                ?: allLocalPersons.firstOrNull {
-                    it.name.trim().removeSuffix("-").trim().equals(cleanName, ignoreCase = true)
+        database.withTransaction {
+            customerDuplicates.removeIdenticalLocalCopies(businessId)
+            for (fileDoc in files) {
+                val fileSharedId = fileDoc.getString("sharedId") ?: fileDoc.id
+                if (userRole == UserRole.WORKER && !accessAll && fileSharedId !in allowedFileIds) {
+                    continue
                 }
-            val mobile = pDoc.getString("mobileNumber")
-            val place = pDoc.getString("place")
-            val notes = pDoc.getString("notes")
-            val sortOrder = pDoc.getLong("sortOrder")?.toInt() ?: 0
-            val isDeleted = pDoc.getBoolean("isDeleted") ?: false
-            val createdAt = pDoc.getLong("createdAt") ?: System.currentTimeMillis()
-            val lastModified = pDoc.getLong("lastModified") ?: System.currentTimeMillis()
-
-            if (existing == null) {
-                val maxSort = allLocalPersons.filter { it.fileId == localFileId && !it.isDeleted }.maxOfOrNull { it.sortOrder } ?: 0
-                val finalSortOrder = if (sortOrder > 0) sortOrder else (maxSort + 1)
-                personDao.insert(
-                    Person(
-                        sharedId = pSharedId,
-                        businessId = businessId,
-                        fileId = localFileId,
-                        fileSharedId = fileSharedId,
-                        name = rawName,
-                        mobileNumber = mobile,
-                        place = place,
-                        notes = notes,
-                        sortOrder = finalSortOrder,
-                        createdAt = createdAt,
-                        lastModified = lastModified,
-                        isDeleted = isDeleted
-                    )
-                )
-            } else {
-                val finalSortOrder = when {
-                    existing.sortOrder > 0 && sortOrder == 0 -> existing.sortOrder
-                    sortOrder > 0 -> sortOrder
-                    else -> existing.sortOrder
+                val name = fileDoc.getString("name") ?: ""
+                val existing = loanFileDao.getFileBySharedId(fileSharedId)
+                if (existing != null && existing.businessId.isNotBlank() && existing.businessId != businessId) {
+                    continue
                 }
-                personDao.update(
-                    existing.copy(
-                        sharedId = pSharedId,
-                        businessId = businessId,
-                        fileId = if (localFileId > 0) localFileId else existing.fileId,
-                        fileSharedId = if (fileSharedId.isNotBlank()) fileSharedId else existing.fileSharedId,
-                        name = existing.name.ifBlank { rawName },
-                        mobileNumber = mobile ?: existing.mobileNumber,
-                        place = place ?: existing.place,
-                        notes = notes ?: existing.notes,
-                        sortOrder = finalSortOrder,
-                        isDeleted = isDeleted,
-                        lastModified = maxOf(lastModified, existing.lastModified)
+                val sortOrder = fileDoc.getLong("sortOrder")?.toInt() ?: 0
+                val isDeleted = fileDoc.getBoolean("isDeleted") ?: false
+                val createdAt = fileDoc.getLong("createdAt") ?: System.currentTimeMillis()
+                val lastModified = fileDoc.getLong("lastModified") ?: System.currentTimeMillis()
+
+                if (existing == null) {
+                    loanFileDao.insert(
+                        LoanFile(
+                            sharedId = fileSharedId,
+                            businessId = businessId,
+                            name = name,
+                            sortOrder = sortOrder,
+                            createdAt = createdAt,
+                            lastModified = lastModified,
+                            isDeleted = isDeleted,
+                            syncStatus = "SYNCED"
+                        )
                     )
-                )
-            }
-        }
-
-        // Cache local persons by sharedId
-        val localPersons = personDao.getAllPersonsIncludingDeleted().associateBy { it.sharedId }
-
-        // 3. Pull loans
-        val loansQuery = if (cutoffTime > 0L) {
-            bizRef.collection("loans").whereGreaterThan("lastModified", cutoffTime)
-        } else {
-            bizRef.collection("loans")
-        }
-        val loansSnapshot = loansQuery.get().await()
-        for (lDoc in loansSnapshot.documents) {
-            val lSharedId = lDoc.getString("sharedId") ?: lDoc.id
-            val personSharedId = lDoc.getString("personSharedId") ?: ""
-            val localPerson = localPersons[personSharedId]
-            if (personSharedId.isNotBlank() && localPerson == null && userRole == UserRole.WORKER && !accessAll) {
-                continue
-            }
-            val localPersonId = localPerson?.id ?: lDoc.getLong("personId") ?: 0L
-
-            val existing = loanDao.getLoanBySharedId(lSharedId)
-            val totalAmount = lDoc.getDouble("totalAmount") ?: 0.0
-            val dateGiven = lDoc.getLong("dateGiven") ?: System.currentTimeMillis()
-            val isCompleted = lDoc.getBoolean("isCompleted") ?: false
-            val completedAt = lDoc.getLong("completedAt")
-            val isDeleted = lDoc.getBoolean("isDeleted") ?: false
-            val createdAt = lDoc.getLong("createdAt") ?: System.currentTimeMillis()
-            val lastModified = lDoc.getLong("lastModified") ?: System.currentTimeMillis()
-
-            if (existing == null) {
-                loanDao.insert(
-                    Loan(
-                        sharedId = lSharedId,
-                        businessId = businessId,
-                        personId = localPersonId,
-                        personSharedId = personSharedId,
-                        totalAmount = totalAmount,
-                        dateGiven = dateGiven,
-                        isCompleted = isCompleted,
-                        completedAt = completedAt,
-                        createdAt = createdAt,
-                        lastModified = lastModified,
-                        isDeleted = isDeleted,
-                        syncStatus = "SYNCED"
+                } else {
+                    loanFileDao.update(
+                        existing.copy(
+                            sharedId = fileSharedId,
+                            businessId = businessId,
+                            name = name,
+                            sortOrder = sortOrder,
+                            isDeleted = isDeleted,
+                            lastModified = maxOf(lastModified, existing.lastModified),
+                            syncStatus = "SYNCED"
+                        )
                     )
-                )
+                }
+            }
+
+            // Cache local files by sharedId to correctly link local relational foreign keys
+            val localFiles = loanFileDao.getAllFilesIncludingDeleted().filter { it.businessId == businessId }
+                .associateBy { it.sharedId }
+            val localFilesById = localFiles.values.associateBy { it.id }
+            val allowedLocalFileSharedIds = if (userRole == UserRole.WORKER && !accessAll) {
+                allowedFileIds.toSet()
             } else {
-                loanDao.update(
-                    existing.copy(
-                        sharedId = lSharedId,
-                        businessId = businessId,
-                        personId = localPersonId,
-                        personSharedId = personSharedId,
-                        totalAmount = totalAmount,
-                        dateGiven = dateGiven,
-                        isCompleted = isCompleted,
-                        completedAt = completedAt,
-                        isDeleted = isDeleted,
-                        lastModified = maxOf(lastModified, existing.lastModified),
-                        syncStatus = "SYNCED"
-                    )
-                )
+                localFiles.keys
             }
-        }
 
-        // Cache local loans by sharedId
-        val localLoans = loanDao.getAllLoansIncludingDeleted().associateBy { it.sharedId }
+            for (pDoc in persons) {
+                val sharedId = pDoc.getString("sharedId")?.takeIf { it.isNotBlank() } ?: pDoc.id
+                val existing = personDao.getPersonBySharedId(sharedId)
+                if (existing != null && existing.businessId.isNotBlank() && existing.businessId != businessId) {
+                    continue
+                }
+                val fileSharedId = pDoc.getString("fileSharedId")?.takeIf { it.isNotBlank() }
+                    ?: existing?.fileSharedId?.takeIf { it.isNotBlank() }
+                    ?: existing?.let { localFilesById[it.fileId]?.sharedId }
+                    ?: pDoc.getLong("fileId")?.let { "file_$it" }
+                    ?: continue
+                if (fileSharedId !in allowedLocalFileSharedIds) continue
+                val file = localFiles[fileSharedId] ?: continue
+                val lastModified = pDoc.getLong("lastModified") ?: 0L
+                val isDeleted = pDoc.getBoolean("isDeleted") ?: false
+                if (existing != null && !existing.acceptsCloudVersion(lastModified, isDeleted)) continue
 
-        // 4. Pull payments
-        val paymentsQuery = if (cutoffTime > 0L) {
-            bizRef.collection("payments").whereGreaterThan("lastModified", cutoffTime)
-        } else {
-            bizRef.collection("payments")
-        }
-        val paymentsSnapshot = paymentsQuery.get().await()
-        for (payDoc in paymentsSnapshot.documents) {
-            val paySharedId = payDoc.getString("sharedId") ?: payDoc.id
-            val loanSharedId = payDoc.getString("loanSharedId") ?: ""
-            val localLoan = localLoans[loanSharedId]
-            if (loanSharedId.isNotBlank() && localLoan == null && userRole == UserRole.WORKER && !accessAll) {
-                continue
-            }
-            val localLoanId = localLoan?.id ?: payDoc.getLong("loanId") ?: 0L
-
-            val existing = paymentDao.getPaymentBySharedId(paySharedId)
-            val amount = payDoc.getDouble("amount") ?: 0.0
-            val date = payDoc.getLong("date") ?: System.currentTimeMillis()
-            val recordedByWorkerId = payDoc.getString("recordedByWorkerId")
-            val recordedByWorkerName = payDoc.getString("recordedByWorkerName")
-            val isDeleted = payDoc.getBoolean("isDeleted") ?: false
-            val createdAt = payDoc.getLong("createdAt") ?: System.currentTimeMillis()
-            val lastModified = payDoc.getLong("lastModified") ?: System.currentTimeMillis()
-
-            if (existing == null) {
-                paymentDao.insert(
-                    Payment(
-                        sharedId = paySharedId,
-                        businessId = businessId,
-                        loanId = localLoanId,
-                        loanSharedId = loanSharedId,
-                        amount = amount,
-                        date = date,
-                        recordedByWorkerId = recordedByWorkerId,
-                        recordedByWorkerName = recordedByWorkerName,
-                        createdAt = createdAt,
-                        lastModified = lastModified,
-                        isDeleted = isDeleted,
-                        syncStatus = "SYNCED"
-                    )
+                val isNewer = existing == null || lastModified > existing.lastModified
+                val sortOrder = pDoc.getLong("sortOrder")?.toInt()
+                val position = existing?.sortOrder?.takeUnless { isNewer && sortOrder != null }
+                    ?: sortOrder
+                    ?: ((personDao.getActivePersonsList(file.id).maxOfOrNull { it.sortOrder } ?: -1) + 1)
+                val customer = Person(
+                    id = existing?.id ?: 0L,
+                    sharedId = sharedId,
+                    businessId = businessId,
+                    fileId = file.id,
+                    fileSharedId = fileSharedId,
+                    name = pDoc.getString("name") ?: existing?.name.orEmpty(),
+                    mobileNumber = if (pDoc.contains("mobileNumber")) pDoc.getString("mobileNumber") else existing?.mobileNumber,
+                    place = if (pDoc.contains("place")) pDoc.getString("place") else existing?.place,
+                    notes = if (pDoc.contains("notes")) pDoc.getString("notes") else existing?.notes,
+                    sortOrder = position,
+                    createdAt = existing?.createdAt ?: pDoc.getLong("createdAt") ?: System.currentTimeMillis(),
+                    lastModified = lastModified,
+                    isDeleted = isDeleted
                 )
-            } else {
-                paymentDao.update(
-                    existing.copy(
-                        sharedId = paySharedId,
-                        businessId = businessId,
-                        loanId = localLoanId,
-                        loanSharedId = loanSharedId,
-                        amount = amount,
-                        date = date,
-                        recordedByWorkerId = recordedByWorkerId,
-                        recordedByWorkerName = recordedByWorkerName,
-                        isDeleted = isDeleted,
-                        lastModified = maxOf(lastModified, existing.lastModified),
-                        syncStatus = "SYNCED"
-                    )
-                )
+                if (existing == null) personDao.insert(customer) else personDao.update(customer)
             }
+
+            // Cache local persons by sharedId
+            val localPersons = personDao.getAllPersonsIncludingDeleted().groupBy { it.sharedId }
+
+            for (lDoc in loans) {
+                val lSharedId = lDoc.getString("sharedId") ?: lDoc.id
+                val existing = loanDao.getLoanBySharedId(lSharedId)
+                val cloudPersonId = lDoc.getString("personSharedId").orEmpty()
+                if (existing != null && cloudPersonId.isNotBlank() &&
+                    existing.personSharedId.isNotBlank() && existing.personSharedId != cloudPersonId
+                ) {
+                    continue
+                }
+                val personSharedId = cloudPersonId.ifBlank {
+                    existing?.personSharedId.orEmpty().ifBlank {
+                        lDoc.getLong("personId")?.let { "person_$it" }.orEmpty()
+                    }
+                }
+                val matches = localPersons[personSharedId].orEmpty().filter {
+                    it.businessId == businessId && it.fileSharedId in allowedLocalFileSharedIds
+                }
+                val localPerson = matches.firstOrNull { it.id == existing?.personId }
+                    ?: matches.singleOrNull()
+                // Numeric cloud IDs are local to the sending device.
+                val localPersonId = localPerson?.id
+                    ?: existing?.personId?.takeIf { personSharedId.isBlank() && userRole == UserRole.OWNER }
+                    ?: continue
+                val totalAmount = lDoc.getDouble("totalAmount") ?: 0.0
+                val dateGiven = lDoc.getLong("dateGiven") ?: System.currentTimeMillis()
+                val isCompleted = lDoc.getBoolean("isCompleted") ?: false
+                val completedAt = lDoc.getLong("completedAt")
+                val isDeleted = lDoc.getBoolean("isDeleted") ?: false
+                val createdAt = lDoc.getLong("createdAt") ?: System.currentTimeMillis()
+                val lastModified = lDoc.getLong("lastModified") ?: 0L
+                if (existing != null && existing.lastModified > lastModified) continue
+
+                if (existing == null) {
+                    loanDao.insert(
+                        Loan(
+                            sharedId = lSharedId,
+                            businessId = businessId,
+                            personId = localPersonId,
+                            personSharedId = personSharedId,
+                            totalAmount = totalAmount,
+                            dateGiven = dateGiven,
+                            isCompleted = isCompleted,
+                            completedAt = completedAt,
+                            createdAt = createdAt,
+                            lastModified = lastModified,
+                            isDeleted = isDeleted,
+                            syncStatus = "SYNCED"
+                        )
+                    )
+                } else {
+                    loanDao.update(
+                        existing.copy(
+                            sharedId = lSharedId,
+                            businessId = businessId,
+                            personId = localPersonId,
+                            personSharedId = personSharedId,
+                            totalAmount = totalAmount,
+                            dateGiven = dateGiven,
+                            isCompleted = isCompleted,
+                            completedAt = completedAt,
+                            isDeleted = isDeleted,
+                            lastModified = maxOf(lastModified, existing.lastModified),
+                            syncStatus = "SYNCED"
+                        )
+                    )
+                }
+            }
+
+            // Cache local loans by sharedId
+            val localLoans = loanDao.getAllLoansIncludingDeleted().filter { it.businessId == businessId }
+                .groupBy { it.sharedId }
+
+            for (payDoc in payments) {
+                val paySharedId = payDoc.getString("sharedId") ?: payDoc.id
+                val existing = paymentDao.getPaymentBySharedId(paySharedId)
+                val cloudLoanId = payDoc.getString("loanSharedId").orEmpty()
+                if (existing != null && cloudLoanId.isNotBlank() &&
+                    existing.loanSharedId.isNotBlank() && existing.loanSharedId != cloudLoanId
+                ) {
+                    continue
+                }
+                val loanSharedId = cloudLoanId.ifBlank {
+                    existing?.loanSharedId.orEmpty().ifBlank {
+                        payDoc.getLong("loanId")?.let { "loan_$it" }.orEmpty()
+                    }
+                }
+                val matches = localLoans[loanSharedId].orEmpty().filter { loan ->
+                    localPersons[loan.personSharedId].orEmpty().any {
+                        it.id == loan.personId && it.fileSharedId in allowedLocalFileSharedIds
+                    }
+                }
+                val localLoan = matches.firstOrNull { it.id == existing?.loanId }
+                    ?: matches.singleOrNull()
+                    ?: continue
+
+                val amount = payDoc.getDouble("amount") ?: 0.0
+                val date = payDoc.getLong("date") ?: System.currentTimeMillis()
+                val recordedByWorkerId = payDoc.getString("recordedByWorkerId")
+                val recordedByWorkerName = payDoc.getString("recordedByWorkerName")
+                val isDeleted = payDoc.getBoolean("isDeleted") ?: false
+                val createdAt = payDoc.getLong("createdAt") ?: System.currentTimeMillis()
+                val lastModified = payDoc.getLong("lastModified") ?: 0L
+                if (existing != null && existing.lastModified > lastModified) continue
+
+                if (existing == null) {
+                    paymentDao.insert(
+                        Payment(
+                            sharedId = paySharedId,
+                            businessId = businessId,
+                            loanId = localLoan.id,
+                            loanSharedId = loanSharedId,
+                            amount = amount,
+                            date = date,
+                            recordedByWorkerId = recordedByWorkerId,
+                            recordedByWorkerName = recordedByWorkerName,
+                            createdAt = createdAt,
+                            lastModified = lastModified,
+                            isDeleted = isDeleted,
+                            syncStatus = "SYNCED"
+                        )
+                    )
+                } else {
+                    paymentDao.update(
+                        existing.copy(
+                            sharedId = paySharedId,
+                            businessId = businessId,
+                            loanId = localLoan.id,
+                            loanSharedId = loanSharedId,
+                            amount = amount,
+                            date = date,
+                            recordedByWorkerId = recordedByWorkerId,
+                            recordedByWorkerName = recordedByWorkerName,
+                            isDeleted = isDeleted,
+                            lastModified = maxOf(lastModified, existing.lastModified),
+                            syncStatus = "SYNCED"
+                        )
+                    )
+                }
+            }
+            customerDuplicates.removeIdenticalLocalCopies(businessId)
         }
 
         // 5. Pull approval requests
@@ -596,49 +581,6 @@ class SyncManager @Inject constructor(
             } catch (e: Exception) {
                 // Handled
             }
-        }
-    }
-
-    private suspend fun autoHealDuplicatePersons(businessId: String, db: FirebaseFirestore) {
-        try {
-            val allPersons = personDao.getAllPersonsIncludingDeleted().filter { !it.isDeleted }
-            val allLoans = loanDao.getAllLoansIncludingDeleted().filter { !it.isDeleted }
-            val now = System.currentTimeMillis()
-
-            val grouped = allPersons.groupBy { Pair(it.fileId, it.name.trim().removeSuffix("-").trim().lowercase()) }
-            for ((_, group) in grouped) {
-                if (group.size <= 1) continue
-
-                // Find keeper: prefer person with active loans, then sortOrder > 0, then highest sortOrder, then lowest ID
-                val keeper = group.maxWithOrNull(
-                    compareBy<Person> { p -> allLoans.any { it.personId == p.id } }
-                        .thenBy { it.sortOrder > 0 }
-                        .thenBy { it.sortOrder }
-                        .thenByDescending { -it.id }
-                ) ?: group.first()
-
-                val duplicates = group.filter { it.id != keeper.id }
-                for (dup in duplicates) {
-                    val loansToRelink = allLoans.filter { it.personId == dup.id }
-                    for (l in loansToRelink) {
-                        loanDao.update(l.copy(personId = keeper.id, personSharedId = keeper.sharedId, lastModified = now))
-                    }
-
-                    personDao.softDelete(dup.id, now)
-
-                    if (businessId.isNotBlank() && dup.sharedId.isNotBlank()) {
-                        try {
-                            db.collection("businesses").document(businessId)
-                                .collection("persons").document(dup.sharedId)
-                                .update(mapOf("isDeleted" to true, "lastModified" to now))
-                        } catch (e: Exception) {
-                            // Non-fatal if offline
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
         }
     }
 }

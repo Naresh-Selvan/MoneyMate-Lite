@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface PersonDao {
-    @Query("SELECT * FROM persons WHERE fileId = :fileId AND isDeleted = 0 ORDER BY sortOrder")
+    @Query("SELECT * FROM persons WHERE fileId = :fileId AND isDeleted = 0 ORDER BY sortOrder, id")
     fun getPersonsByFile(fileId: Long): Flow<List<Person>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -83,7 +83,12 @@ interface PersonDao {
     @Query("SELECT * FROM persons WHERE id = :id LIMIT 1")
     suspend fun getPersonById(id: Long): Person?
 
-    @Query("SELECT * FROM persons WHERE sharedId = :sharedId LIMIT 1")
+    @Query("""
+        SELECT * FROM persons WHERE sharedId = :sharedId
+        ORDER BY isDeleted, EXISTS(SELECT 1 FROM loans WHERE loans.personId = persons.id) DESC,
+            lastModified DESC, id
+        LIMIT 1
+    """)
     suspend fun getPersonBySharedId(sharedId: String): Person?
 
     @Query("SELECT * FROM persons WHERE sharedId = :sharedId LIMIT 1")
@@ -106,4 +111,7 @@ interface PersonDao {
 
     @Query("DELETE FROM persons")
     suspend fun clearAll()
+
+    @Query("DELETE FROM persons WHERE id = :id")
+    suspend fun removeRedundantLocalCopy(id: Long)
 }

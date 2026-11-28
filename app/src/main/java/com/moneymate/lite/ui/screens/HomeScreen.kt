@@ -93,6 +93,7 @@ fun HomeScreen(
     val isSyncing by viewModel.isSyncing.collectAsState()
     val pendingSyncCount by viewModel.pendingSyncCount.collectAsState()
     val failedSyncCount by viewModel.failedSyncCount.collectAsState()
+    val syncErrors by viewModel.syncErrors.collectAsState()
     val pendingApprovalsCount by approvalViewModel.pendingCount.collectAsState()
 
     var showAddDialog by remember { mutableStateOf(false) }
@@ -188,6 +189,7 @@ fun HomeScreen(
                 isSyncing = isSyncing,
                 pendingSyncCount = pendingSyncCount,
                 failedSyncCount = failedSyncCount,
+                hasSyncErrors = syncErrors.isNotEmpty(),
                 onRetry = { viewModel.refreshSync() }
             )
 
@@ -390,6 +392,7 @@ private fun SyncStatusBanner(
     isSyncing: Boolean,
     pendingSyncCount: Int,
     failedSyncCount: Int,
+    hasSyncErrors: Boolean,
     onRetry: () -> Unit
 ) {
     if (!isOnline) {
@@ -411,7 +414,7 @@ private fun SyncStatusBanner(
                 )
             }
         }
-    } else if (failedSyncCount > 0) {
+    } else if (!isSyncing && (failedSyncCount > 0 || hasSyncErrors)) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -430,7 +433,8 @@ private fun SyncStatusBanner(
                 ) {
                     Icon(Icons.Default.SyncProblem, contentDescription = null, tint = Color(0xFFC62828), modifier = Modifier.size(16.dp))
                     Text(
-                        text = "$failedSyncCount sync item(s) failed. Tap to retry.",
+                        text = if (hasSyncErrors) "Sync could not finish. Tap to retry."
+                        else "$failedSyncCount sync item(s) failed. Tap to retry.",
                         style = MaterialTheme.typography.labelMedium,
                         color = Color(0xFFC62828)
                     )

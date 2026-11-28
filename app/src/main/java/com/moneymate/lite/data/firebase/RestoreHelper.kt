@@ -70,8 +70,10 @@ class RestoreHelper @Inject constructor(
                             lastModified = doc.getLong("lastModified") ?: System.currentTimeMillis(),
                             isDeleted = doc.getBoolean("isDeleted") ?: false
                         )
-                        loanFileDao.insert(file)
-                        restoredFiles++
+                        if (loanFileDao.getFileBySharedId(file.sharedId) == null) {
+                            loanFileDao.insert(file)
+                            restoredFiles++
+                        }
                     }
 
                     // Persons
@@ -91,8 +93,12 @@ class RestoreHelper @Inject constructor(
                             lastModified = doc.getLong("lastModified") ?: System.currentTimeMillis(),
                             isDeleted = doc.getBoolean("isDeleted") ?: false
                         )
-                        personDao.insert(p)
-                        restoredPersons++
+                        val localFile = loanFileDao.getFileBySharedId(p.fileSharedId.ifBlank { "file_${p.fileId}" })
+                            ?: continue
+                        if (localFile.businessId == businessId && personDao.getPersonBySharedId(p.sharedId) == null) {
+                            personDao.insert(p.copy(fileId = localFile.id, fileSharedId = localFile.sharedId))
+                            restoredPersons++
+                        }
                     }
 
                     // Loans
@@ -111,8 +117,12 @@ class RestoreHelper @Inject constructor(
                             lastModified = doc.getLong("lastModified") ?: System.currentTimeMillis(),
                             isDeleted = doc.getBoolean("isDeleted") ?: false
                         )
-                        loanDao.insert(l)
-                        restoredLoans++
+                        val localPerson = personDao.getPersonBySharedId(l.personSharedId.ifBlank { "person_${l.personId}" })
+                            ?: continue
+                        if (localPerson.businessId == businessId && loanDao.getLoanBySharedId(l.sharedId) == null) {
+                            loanDao.insert(l.copy(personId = localPerson.id, personSharedId = localPerson.sharedId))
+                            restoredLoans++
+                        }
                     }
 
                     // Payments
@@ -131,8 +141,12 @@ class RestoreHelper @Inject constructor(
                             lastModified = doc.getLong("lastModified") ?: System.currentTimeMillis(),
                             isDeleted = doc.getBoolean("isDeleted") ?: false
                         )
-                        paymentDao.insert(pay)
-                        restoredPayments++
+                        val localLoan = loanDao.getLoanBySharedId(pay.loanSharedId.ifBlank { "loan_${pay.loanId}" })
+                            ?: continue
+                        if (localLoan.businessId == businessId && paymentDao.getPaymentBySharedId(pay.sharedId) == null) {
+                            paymentDao.insert(pay.copy(loanId = localLoan.id, loanSharedId = localLoan.sharedId))
+                            restoredPayments++
+                        }
                     }
                 }
 
@@ -164,8 +178,7 @@ class RestoreHelper @Inject constructor(
                             createdAt = fileDoc.getLong("createdAt") ?: System.currentTimeMillis(),
                             isDeleted = fileDoc.getBoolean("isDeleted") ?: false
                         )
-                        val fileId = loanFileDao.insert(file)
-                        restoredFiles++
+                        val fileId = loanFileDao.getFileBySharedId(file.sharedId)?.id ?: loanFileDao.insert(file).also { restoredFiles++ }
 
                         val personsSnap = fileDoc.reference.collection("persons").get().await()
                         for (pDoc in personsSnap.documents) {
@@ -182,8 +195,7 @@ class RestoreHelper @Inject constructor(
                                 createdAt = pDoc.getLong("createdAt") ?: System.currentTimeMillis(),
                                 isDeleted = pDoc.getBoolean("isDeleted") ?: false
                             )
-                            val personId = personDao.insert(person)
-                            restoredPersons++
+                            val personId = personDao.getPersonBySharedId(person.sharedId)?.id ?: personDao.insert(person).also { restoredPersons++ }
 
                             val loansSnap = pDoc.reference.collection("loans").get().await()
                             for (lDoc in loansSnap.documents) {
@@ -199,8 +211,7 @@ class RestoreHelper @Inject constructor(
                                     createdAt = lDoc.getLong("createdAt") ?: System.currentTimeMillis(),
                                     isDeleted = lDoc.getBoolean("isDeleted") ?: false
                                 )
-                                val loanId = loanDao.insert(loan)
-                                restoredLoans++
+                                val loanId = loanDao.getLoanBySharedId(loan.sharedId)?.id ?: loanDao.insert(loan).also { restoredLoans++ }
 
                                 val paymentsSnap = lDoc.reference.collection("payments").get().await()
                                 for (payDoc in paymentsSnap.documents) {
@@ -214,8 +225,10 @@ class RestoreHelper @Inject constructor(
                                         createdAt = payDoc.getLong("createdAt") ?: System.currentTimeMillis(),
                                         isDeleted = payDoc.getBoolean("isDeleted") ?: false
                                     )
-                                    paymentDao.insert(payment)
-                                    restoredPayments++
+                                    if (paymentDao.getPaymentBySharedId(payment.sharedId) == null) {
+                                        paymentDao.insert(payment)
+                                        restoredPayments++
+                                    }
                                 }
                             }
                         }

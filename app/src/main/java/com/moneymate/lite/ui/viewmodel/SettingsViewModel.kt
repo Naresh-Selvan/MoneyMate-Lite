@@ -8,6 +8,8 @@ import com.moneymate.lite.data.firebase.UploadHelper
 import com.moneymate.lite.data.migration.BusinessMigrationManager
 import com.moneymate.lite.data.migration.MigrationPreview
 import com.moneymate.lite.data.model.UserRole
+import com.moneymate.lite.data.sync.CustomerDuplicate
+import com.moneymate.lite.data.sync.CustomerDuplicates
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,7 +22,8 @@ class SettingsViewModel @Inject constructor(
     private val uploadHelper: UploadHelper,
     private val restoreHelper: RestoreHelper,
     private val migrationManager: BusinessMigrationManager,
-    private val authManager: AuthManager
+    private val authManager: AuthManager,
+    private val customerDuplicates: CustomerDuplicates
 ) : ViewModel() {
 
     private val _isBackingUp = MutableStateFlow(false)
@@ -40,6 +43,21 @@ class SettingsViewModel @Inject constructor(
 
     private val _migrationPreview = MutableStateFlow<MigrationPreview?>(null)
     val migrationPreview: StateFlow<MigrationPreview?> = _migrationPreview.asStateFlow()
+
+    private fun ownerBusinessId(): String {
+        check(authManager.userRole.value == UserRole.OWNER && authManager.currentUser.value != null) {
+            "Sign in as the owner to review customer records."
+        }
+        return authManager.businessId.value.also {
+            check(it.isNotBlank()) { "The business is unavailable." }
+        }
+    }
+
+    suspend fun reviewCustomerDuplicates(): List<CustomerDuplicate> =
+        customerDuplicates.review(ownerBusinessId())
+
+    suspend fun archiveCustomerDuplicate(candidate: CustomerDuplicate) =
+        customerDuplicates.archive(ownerBusinessId(), candidate)
 
     fun loadMigrationPreview() {
         val bizId = authManager.businessId.value
